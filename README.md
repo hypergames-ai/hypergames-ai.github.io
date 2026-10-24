@@ -59,7 +59,6 @@ aligned.
 | `maxParticles` | `400` | Hard cap on live particles |
 | `colors` | head `#e6ffe6`, body `#00ff41`, bg `#000` | Hex colours (`#rrggbb` for head and body) |
 | `reducedMotion` | `'auto'` | `'auto'` follows `prefers-reduced-motion`; `true`/`false` force it. Reduced = half density, half speed |
-| `startDelayMs` | `1500` | Milliseconds of black screen after load before the rain begins |
 
 ## Console
 
@@ -78,6 +77,7 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | `<prog ref="label">text</prog>` | A clickable, underlined link to the program tagged *label* (no tags inside *text*). Grey, still underlined, and inert if no program has that tag |
 | `<prog ref="label" one-way>text</prog>` | Same, but the linked program shows without `< BACK` and becomes the base page: the nav stack starts over from it |
 | `<stop/>` (very last characters) | The startup sequence stops after this program |
+| `<goto ref="label">` (very last characters, instead of `<stop/>`) | When the program finishes, jumps to the program tagged *label* like a one-way link: nav stack cleared, the target becomes the base page and the sequence carries on from it. Doesn't fire if the program is cut short; a missing tag stops like `<stop/>`; ignored inside `<gosub>` templates |
 | `<stop make-cookie/>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
 | `<landing/>` (very first characters, before any `<tag>`) | Marks the landing program for returning visitors. Not displayed; even a leading space disables it |
 | `<delete-cookie/>` | Clears the returning-visitor flag at that point in the program |
@@ -85,6 +85,9 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | `<a href="…" download>` / `download="name.pdf"` | Download instead of navigate, optionally saving as *name*. Browsers honour this only for same-origin (relative) links; on an absolute link to another site it just opens |
 | `<a href="…" target="_blank">` | Always open in a new tab |
 | `<gosub ref="label"/>` | Pastes the program tagged *label* in place, as if written there: its text types and its commands (`<delay>`, `<cls>`, links, `<delete-cookie/>`, …) run inline. Its own `<tag>`/`<landing/>`/`<stop …/>` are ignored. Templates can include templates; cycles and missing refs paste nothing |
+| `<bottom-row/>`, `<bottom-row delta=-1/>` | Moves the write head and cursor to the left edge of the panel's last visible row, or `delta` rows above it (`delta` ≤ 0). Nothing is erased; text written there draws over whatever is on that row. Re-anchors when the window resizes |
+| `<start-rain>` | Starts the rain: drops begin falling in a staggered wave. No-op if it's already raining. The rain never starts by itself |
+| `<stop-rain>` | Stops the rain: drops already falling finish (and splash), no new ones form |
 | any other `<tag …>` | Not displayed (silently ignored); `<` followed by a space stays literal |
 
 The console is a canvas: text is laid out on a monospace grid in Courier Prime at `1.25vmax`
@@ -108,21 +111,26 @@ are reachable only through links.
 pauses, no typing gaps, and no replace effect (only the `<with>` text) — so its final text appears
 at once; `<cls>` still clears. It turns itself off once that program finishes. It starts OFF; `< BACK` sets it.
 
+**Footers:** `Content…<bottom-row/>FOOTER TEXT<bottom-row delta=-1/>` puts the footer on the last
+row and leaves the cursor blinking at the left edge of the row above it.
+
 **Templates:** a template is just a tagged program used via `<gosub>`. Since tagged programs also
 run in the startup sequence, put templates after a `<stop/>` program so they only appear where
 they're included.
 
 **Returning visitors:** the "cookie" is a presence-only flag in `localStorage`
 (`hypergames.cookie`), so it also works from `file://`. At launch, if the number of programs starting
-with `<landing/>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0
-after the usual rain delay; with the flag, the rain starts immediately and the `<landing/>` program
-runs first (as the base page). Clearing the site's data resets it.
+with `<landing/>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0;
+with the flag, the `<landing/>` program runs first (as the base page). Either way the rain appears
+only when a program runs `<start-rain>` — put one at the top of the landing program to have rain
+straight away for returning visitors. Clearing the site's data resets it.
 
 ## JavaScript API
 
 ```js
 MatrixRain.stop();                       // pause (stays paused across tab switches)
 MatrixRain.start();                      // resume
+MatrixRain.startRain(); MatrixRain.stopRain();  // rain on/off, as <start-rain>/<stop-rain>; MatrixRain.raining
 MatrixRain.setConfig({ density: 0.4 });  // change CFG keys and rebuild
 MatrixRain.refresh();                    // re-read panel geometry and rebuild drops
 

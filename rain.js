@@ -19,7 +19,6 @@
     maxParticles: 400,
     colors: { head: '#e6ffe6', body: '#00ff41', bg: '#000' },
     reducedMotion: 'auto',      // honours prefers-reduced-motion: halves density and speed
-    startDelayMs: 1500,         // black screen this long after load before the rain begins
   };
 
   const STEP = 1000 / 60;       // ms per simulation step
@@ -61,6 +60,7 @@
   let dashes = [];              // { x, age } splat marks on the panel's top edge
   let fxDirty = false;          // #fx still shows something that needs clearing
   let simTime = 0;              // seconds of simulated time; drives drop waits
+  let raining = false;          // startRain()/stopRain(): when off, finished drops don't respawn
   let running = false, rafId = 0, last = 0, acc = 0;
 
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -69,13 +69,17 @@
 
   function newDrop(x) {
     const d = { x, y: 0, speed: 0, lastCell: 0, tail: 0, decay: 0, reach: 0,
-                state: 'falling', waitUntil: 0, splatters: false, splashed: false,
+                state: 'waiting', waitUntil: 0, splatters: false, splashed: false,
                 active: Math.random() < CFG.density * motion };
+    if (raining) firstWave(d);
+    return d;
+  }
+
+  // Spread a fresh wave over a screen's height so drops sharing a column don't fall in step.
+  function firstWave(d) {
     respawn(d);
-    // Spread the first wave over a screen's height so drops sharing a column don't fall in step.
     d.y -= rand(0, rows);
     d.lastCell = Math.floor(d.y);
-    return d;
   }
 
   function respawn(d) {
@@ -125,7 +129,7 @@
       if (!d.active) continue;
 
       if (d.state === 'waiting') {
-        if (simTime >= d.waitUntil) respawn(d);
+        if (raining && simTime >= d.waitUntil) respawn(d);
         else continue;
       }
 
@@ -367,19 +371,33 @@
   reduceQuery.addEventListener('change', refresh);
   watchDpr();
 
-  let wantRunning = false;      // stop() from the API should survive a tab switch; false until startDelayMs
+  let wantRunning = true;       // stop() from the API should survive a tab switch
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (running) stop(); }
     else if (wantRunning) start();
   });
 
+  // Rain on/off (console <start-rain>/<stop-rain>). Starting sends idle drops down in a staggered
+  // wave and is a no-op while already raining; stopping lets falling drops finish, then no more form.
+  function startRain() {
+    if (raining) return;
+    raining = true;
+    for (const d of drops) if (d.state === 'waiting') firstWave(d);
+  }
+
+  function stopRain() { raining = false; }
+
   window.MatrixRain = {
-    start() { wantRunning = true; start(); },
+    start() { wantRunning = true; start(); },            // animation loop (pause/resume)
     stop() { wantRunning = false; stop(); },
+    startRain,
+    stopRain,
+    get raining() { return raining; },
     setConfig,
     refresh,
   };
 
+  // The loop runs from load, but nothing falls until a program starts the rain.
   resize(true);
-  setTimeout(() => { wantRunning = true; start(); }, CFG.startDelayMs);
+  start();
 })();

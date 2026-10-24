@@ -44,16 +44,23 @@
   // first; otherwise the flag is cleared and program 0 runs. Unrecognised tags render as nothing. <stop/> as the very last
   // characters ends the startup sequence after that program.
   // Templates: <gosub ref="label"/> pastes that tagged program in place; its commands run inline.
+  // <bottom-row/> moves the write head (and cursor) to the left edge of the last visible row;
+  // <bottom-row delta=-1/> to the row above it (delta ≤ 0). Nothing is erased.
+  // Rain: <start-rain> starts it (no-op if raining), <stop-rain> lets falling drops finish and
+  // forms no more. The rain doesn't start by itself.
+  // <goto ref="label"> as the very last characters (instead of <stop/>) jumps to that program when
+  // this one finishes, like a one-way link.
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
   // download instead, target="_blank" for a new tab).
   const PROGRAMS = [
-    '<delay>2200ms</delay>',
-    'Modal 101 Breach/USER Violation\nHost Alarm KIWW/HH:MM<delay>2500ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>File not found<delay>1500ms</delay><cls>',
+    '<tag>start</tag><cls><delay>1500ms</delay><start-rain><delay>700ms</delay>',
+    '<tag>breach</tag><cls>Modal 101 Breach/USER Violation\nHost Alarm KIWW/HH:MM<delay>2500ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>File not found<delay>1500ms</delay><cls>',
     'Call trans opt: received. MM-DD-YY HH:MM:SS REC:Log><delay>4000ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>',
     "ALERT - PERIMETER BREACH\n========================\nMODAL ERROR: IR.AA.W1M: ON DEVICE D: AN ILLEGAL MEMORY ACCESS\nERROR: MISSING FILE 'MORPH.BLD.EXE'/'HEART O' THE CITY'\nCODE: 009952310\nCONTENT: モーフィアスはここを去った\n<delay>4000ms</delay><cls>",
-    'Program restart initiated: closing modal...<delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
-    '<landing/>Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><delay>1000ms</delay>\n\nhypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<delay>150000ms</delay><stop make-cookie/>',
+    'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
+    '<landidng/>Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>1000ms</delay>\n\nhypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<bottom-row delta=-1/><a href="files/HypergamesCoreConcepts.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">See GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n<delay>30000ms</delay><stop make-cookie/>',
     '<tag>q1</tag>This is an informational page.<delay>1000ms</delay>The Matrix has you<stop/>',
+    '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth." (swallows pill)<start-rain>\n\n<delay>1500ms</delay>Agent Morpheus: "Whoa, what’s happening????"\n<delay>1500ms</delay><goto ref="breach">',
   ];
 
   const FONT_STACK = "'Courier Prime', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', monospace";
@@ -65,6 +72,8 @@
 
   // ---- Screen state -------------------------------------------------------------------------
 
+  // <bottom-row> is kept in the screen text as this marker, so re-layout (and resizes) re-anchor it.
+  const ROW_MARK = '\uE000';
   let screenText = '';
   let attrs = [];                // per code point of screenText: null, or the link object it belongs to
   let typing = false;
@@ -129,11 +138,13 @@
   function layout() {
     const maxW = boxW - 2 * padX, maxH = boxH - 2 * padY;
     const cw = CURSOR.w * cap;
+    const bottomRow = Math.max(0, Math.floor(maxH / lineH) - 1);   // last row that fits entirely
     const placed = [];
     let x = 0, line = 0, k = 0;
     for (const ch of screenText) {                       // by code point, so CJK stays whole
       const attr = attrs[k++];
       if (ch === '\n') { x = 0; line++; continue; }
+      if (ch === ROW_MARK) { x = 0; line = Math.max(0, bottomRow + attr.delta); continue; }   // <bottom-row>
       const w = charWidth(ch);
       if (x > 0 && x + w > maxW) { x = 0; line++; }
       placed.push([ch, x, line, w, attr]);
@@ -146,7 +157,7 @@
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
-    linkRects = glyphs.filter(g => g[4]).map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
+    linkRects = glyphs.filter(g => g[4] && g[4].kind !== 'row').map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
   }
 
@@ -399,16 +410,21 @@
   }
 
   // Program-level markers, not displayed: <landing/> (only as the very first characters), then
-  // <tag>label</tag>, and <stop/> or <stop make-cookie/> as the very last characters.
+  // <tag>label</tag>; and as the very last characters <stop/>, <stop make-cookie/> or
+  // <goto ref="label">.
   function readProgram(src) {
-    let body = src, label = null, stop = false, makeCookie = false;
+    let body = src, label = null, stop = false, makeCookie = false, goto;
     const landing = body.startsWith('<landing/>');
     if (landing) body = body.slice('<landing/>'.length);
     const t = /^<tag>([a-z0-9_]+)<\/tag>/.exec(body);
     if (t) { label = t[1]; body = body.slice(t[0].length); }
-    const st = /<stop(\s+make-cookie)?\/>$/.exec(body);
-    if (st) { stop = true; makeCookie = Boolean(st[1]); body = body.slice(0, st.index); }
-    return { landing, label, stop, makeCookie, body };
+    const end = /(?:<stop(\s+make-cookie)?\/>|<goto ref="([^"]*)"\s*\/?>)$/.exec(body);
+    if (end) {
+      if (end[2] !== undefined) goto = end[2];
+      else { stop = true; makeCookie = Boolean(end[1]); }
+      body = body.slice(0, end.index);
+    }
+    return { landing, label, stop, makeCookie, goto, body };
   }
 
   // Anything tag-shaped that isn't recognised renders as nothing. "< BACK" or "a < b" (a space
@@ -436,7 +452,7 @@
   // A linked page (back = true) gets a typed "< BACK" line after every clear.
   function parse(text, back = false) {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"(\s+one-way)?>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"(\s+one-way)?>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -444,6 +460,7 @@
       if (m[1] !== undefined) ops.push({ delay: Number(m[1]) });
       else if (m[0] === '<cls>') ops.push({ cls: true });
       else if (m[0] === '<delete-cookie/>') ops.push({ deleteCookie: true });
+      else if (/^<(start|stop)-rain\s*\/?>$/.test(m[0])) ops.push({ rain: m[0].startsWith('<start') });
       else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: Boolean(m[7]) });
       else if (m[3] !== undefined) {
         // <replace>: old and new are plain text (tags stripped), so the backspace count is exact.
@@ -454,6 +471,8 @@
         ops.push({ delay: Number(m[2] || 0), replaceHold: true }, { erase: [...oldText].length });
         if (m[4]) ops.push({ delay: Number(m[4]), replaceHold: true });
         if (newText) ops.push({ text: newText });
+      } else if (m[0].startsWith('<bottom-row')) {
+        ops.push({ bottomRow: Math.min(0, Number(m[11] || 0)) });   // delta: 0 or negative
       } else if (m[9] !== undefined) {
         // <a href="…" download? target?>text</a>: a web link; without an href it's plain text.
         const at = {};
@@ -486,7 +505,9 @@
 
   // Resolves after `ms` of visible time: the countdown pauses while the tab is hidden, so the
   // console stops with the rain and picks up where it left off.
+  let waitCount = 0;            // waits started so far; lets <goto> tell a waiting program from a spinning one
   function wait(ms, g) {
+    waitCount++;
     return new Promise((resolve, reject) => {
       let left = ms, t0 = 0, timer = 0;
       const arm = () => { t0 = performance.now(); timer = setTimeout(done, left); };
@@ -507,10 +528,15 @@
     pageIndex = i;
     const skip = noDisplayDelay;   // no pauses, no typing gaps, no <replace> effect: the text appears at once
     const prog = readProgram(PROGRAMS[i]);
+    const waitsAtStart = waitCount;
     for (const op of parse(stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [])), back)) {
       if (skip && (op.delay !== undefined || op.erase !== undefined || op.replaceOld)) continue;
       if (op.cls) {
         clearScreen();
+      } else if (op.bottomRow !== undefined) {
+        typeChar(ROW_MARK, { kind: 'row', delta: op.bottomRow });   // a directive, not typed: no wait
+      } else if (op.rain !== undefined) {
+        if (window.MatrixRain) op.rain ? window.MatrixRain.startRain() : window.MatrixRain.stopRain();
       } else if (op.deleteCookie) {
         deleteCookie();
       } else if (op.delay !== undefined) {
@@ -547,6 +573,26 @@
     }
     if (skip) noDisplayDelay = false;                     // one-shot: only once the program is done
     if (prog.makeCookie) makeCookie();                    // <stop make-cookie/>: only on a completed run
+    if (prog.goto !== undefined) return scheduleGoto(prog.goto, g, waitCount === waitsAtStart);
+  }
+
+  // <goto ref="label"> at the end of a completed program: jump like a one-way link (stack cleared,
+  // the target becomes the base page). Deferred so the finishing loop exits first, and dropped if
+  // anything else started meanwhile. A broken ref stops like <stop/>. A cycle of programs that
+  // finish without waiting at all is cut off after GOTO_SPIN_LIMIT jumps.
+  const GOTO_SPIN_LIMIT = 32;
+  let gotoSpins = 0;
+  function scheduleGoto(label, g, finishedWithoutWaiting) {
+    const i = taggedIndex(label);
+    if (i < 0) return 'stop';
+    gotoSpins = finishedWithoutWaiting ? gotoSpins + 1 : 0;
+    if (gotoSpins > GOTO_SPIN_LIMIT) {
+      console.warn(`console: <goto> loop without any waits stopped at "${label}"`);
+      gotoSpins = 0;
+      return 'stop';
+    }
+    setTimeout(() => { if (gen === g) run(i); }, 0);
+    return 'goto';
   }
 
   // The one place to change program order (e.g. random cycling later). -1 = no more programs.
@@ -559,10 +605,10 @@
   async function loop(g) {
     try {
       for (let i; (i = nextProgram()) >= 0;) {
-        await runProgram(i, g);
-        if (readProgram(PROGRAMS[i]).stop) break;
+        const r = await runProgram(i, g);
+        if (r === 'goto' || r === 'stop' || readProgram(PROGRAMS[i]).stop) break;
       }
-      running = false;
+      if (g === gen) running = false;                     // a goto may already have started a newer loop
     } catch (e) {
       if (e !== ABORT) throw e;
     }
@@ -694,13 +740,11 @@
   resize();
   requestAnimationFrame(frame);
 
-  // Launch: a returning visitor (flag set, exactly one <landing/> program) gets the rain at once
-  // and the landing program first. Otherwise the flag is cleared and the sequence starts at 0.
+  // Launch: a returning visitor (flag set, exactly one <landing/> program) starts on the landing
+  // program. Otherwise the flag is cleared and the sequence starts at 0. (Rain starts only from a
+  // program's <start-rain>.)
   const landings = PROGRAMS.filter(p => readProgram(p).landing);
   if (landings.length !== 1) deleteCookie();
-  if (hasCookie()) {
-    if (window.MatrixRain) window.MatrixRain.start();    // its own delayed start becomes a no-op
-    next = PROGRAMS.indexOf(landings[0]);
-  }
+  if (hasCookie()) next = PROGRAMS.indexOf(landings[0]);
   start();
 })();
