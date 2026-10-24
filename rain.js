@@ -19,6 +19,7 @@
     maxParticles: 400,
     colors: { head: '#e6ffe6', body: '#00ff41', bg: '#000' },
     reducedMotion: 'auto',      // honours prefers-reduced-motion: halves density and speed
+    startDelayMs: 1500,         // black screen this long after load before the rain begins
   };
 
   const STEP = 1000 / 60;       // ms per simulation step
@@ -366,7 +367,7 @@
   reduceQuery.addEventListener('change', refresh);
   watchDpr();
 
-  let wantRunning = true;       // stop() from the API should survive a tab switch
+  let wantRunning = false;      // stop() from the API should survive a tab switch; false until startDelayMs
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) { if (running) stop(); }
     else if (wantRunning) start();
@@ -380,5 +381,5 @@
   };
 
   resize(true);
-  start();
+  setTimeout(() => { wantRunning = true; start(); }, CFG.startDelayMs);
 })();
