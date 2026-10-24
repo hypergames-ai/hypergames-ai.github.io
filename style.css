@@ -38,7 +38,10 @@ html, body {
   background: #000;
   border: 0.12vmax solid rgba(0, 255, 65, 0.35);
   box-shadow: 0 0 2.5vmax rgba(0, 255, 65, 0.18);
-  padding: 1.5vmax;                                    /* console text inset */
+  /* Console text inset: 1.5vmax, but in windows wider than 16:9 it follows the height, as the
+     console font does (console.js CFG.maxAspect), so the text keeps its rows when the window shortens. */
+  padding: min(1.5vmax, 1.5vh * 16 / 9);
+  padding: min(1.5vmax, 1.5dvh * 16 / 9);
 }
 
 /* Console (console.js): a canvas over the panel's padding box; text, cursor and glow are drawn

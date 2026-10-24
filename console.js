@@ -10,6 +10,8 @@
     eraseMinMs: 30,            // <replace>: gap between backspace pecks, random in [min, max]
     eraseMaxMs: 100,
     fontVmax: 1.25,             // 1.25vmax = 24px = 18pt on a 1920-wide window
+    maxAspect: 16 / 9,          // in wider windows the font follows the height (as #panel's padding
+                                // does in style.css), so the panel always fits the 16:9 row count
     lineHeight: 1.25,           // em
     // Halfway between the film frame's pale mint (text 135,209,189; cursor 197,218,212) and the
     // rain's green (0,255,65), so the console doesn't jump out from the rain around it.
@@ -385,7 +387,8 @@
     dpr = newDpr; boxW = w; boxH = h;
     padX = parseFloat(cs.paddingLeft) || 0;
     padY = parseFloat(cs.paddingTop) || 0;
-    fontPx = CFG.fontVmax * Math.max(window.innerWidth, window.innerHeight) / 100;
+    const vw = window.innerWidth, vh = window.innerHeight;
+    fontPx = CFG.fontVmax * Math.min(Math.max(vw, vh), vh * CFG.maxAspect) / 100;
     for (const c of [canvas, src]) { c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr)); }
     fbo = null;
     measure();

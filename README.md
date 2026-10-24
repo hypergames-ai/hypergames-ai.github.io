@@ -36,6 +36,11 @@ panel's border, glow, padding and font, particle sizes and speeds. Rain speeds a
 second. In a landscape window the column count is constant, so shrinking the window gives the
 same picture, smaller.
 
+The console's font and the panel's padding are the exception in windows wider than 16:9: there they
+follow the height instead (as if the window were 16:9), so the panel always fits the same 15 rows
+it shows at 1920×1080 and a shorter window shrinks the text rather than losing rows. Narrower and
+portrait windows show more rows.
+
 The panel is `75vw × 50vh` (`50dvh` where supported), defined only in `style.css`. `rain.js`
 reads its geometry from the DOM on every resize, so changing the panel's CSS keeps the splashes
 aligned.
@@ -91,7 +96,7 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | any other `<tag …>` | Not displayed (silently ignored); `<` followed by a space stays literal |
 
 The console is a canvas: text is laid out on a monospace grid in Courier Prime at `1.25vmax`
-(18 pt on a 1920-wide window; Japanese falls back to the system CJK font), and WebGL composites it
+(18 pt on a 1920×1080 window; height-limited beyond 16:9, `CFG.maxAspect`; Japanese falls back to the system CJK font), and WebGL composites it
 with the cursor. A two-level bloom (tight halo plus wide haze) is built in but off for now
 (`CFG.glow: false`). Cursor proportions were measured from a frame of the film; the colours sit
 halfway between the film's pale mint and the rain's green. The cursor is a block about 1.75
