@@ -59,10 +59,12 @@ aligned.
 | `maxParticles` | `400` | Hard cap on live particles |
 | `colors` | head `#e6ffe6`, body `#00ff41`, bg `#000` | Hex colours (`#rrggbb` for head and body) |
 | `reducedMotion` | `'auto'` | `'auto'` follows `prefers-reduced-motion`; `true`/`false` force it. Reduced = half density, half speed |
+| `startDelayMs` | `1500` | Milliseconds of black screen after load before the rain begins |
 
 ## Console
 
-`console.js` runs programs 0, 1, 2, 3, 0, … from launch. Each program clears the screen, then types
+`console.js` runs programs 0–5 once from launch, then leaves the screen as the last one left
+it. Each program clears the screen, then types
 its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Program syntax:
 
 | In the program text | Effect |
@@ -70,7 +72,20 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | `\n` | New line |
 | `<delay>4000ms</delay>` | Pause; the cursor blinks meanwhile |
 | `<cls>` | Clear the screen; the cursor returns to the top left |
-| `MM-DD-YY`, `HH:MM:SS` | Replaced with the local date and time when the program starts |
+| `<replace hold="2000ms">old<with hold="1000ms">new</replace>` | Type *old*, hold, backspace it one character at a time (`CFG.eraseMinMs`–`eraseMaxMs`, 30–100 ms apart), hold again, then type *new*. Both holds are optional |
+| `MM-DD-YY`, `HH:MM:SS`, `HH:MM` | Replaced with the local date and time when the program starts |
+| `<tag>label</tag>` (very first characters) | Names the program, for links; label is `a-z`, `0-9`, `_`. Not displayed |
+| `<prog ref="label">text</prog>` | A clickable, underlined link to the program tagged *label* (no tags inside *text*). Grey, still underlined, and inert if no program has that tag |
+| `<prog ref="label" one-way>text</prog>` | Same, but the linked program shows without `< BACK` and becomes the base page: the nav stack starts over from it |
+| `<stop/>` (very last characters) | The startup sequence stops after this program |
+| `<stop make-cookie/>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
+| `<landing/>` (very first characters, before any `<tag>`) | Marks the landing program for returning visitors. Not displayed; even a leading space disables it |
+| `<delete-cookie/>` | Clears the returning-visitor flag at that point in the program |
+| `<a href="files/report.pdf">text</a>` | A web link, underlined. Relative hrefs (no leading `/`) resolve against the page, so they work on localhost, GitHub Pages and `file://`; absolute `https://…` hrefs work too. Opens in the same tab (Ctrl/Cmd- or middle-click: new tab) |
+| `<a href="…" download>` / `download="name.pdf"` | Download instead of navigate, optionally saving as *name*. Browsers honour this only for same-origin (relative) links; on an absolute link to another site it just opens |
+| `<a href="…" target="_blank">` | Always open in a new tab |
+| `<gosub ref="label"/>` | Pastes the program tagged *label* in place, as if written there: its text types and its commands (`<delay>`, `<cls>`, links, `<delete-cookie/>`, …) run inline. Its own `<tag>`/`<landing/>`/`<stop …/>` are ignored. Templates can include templates; cycles and missing refs paste nothing |
+| any other `<tag …>` | Not displayed (silently ignored); `<` followed by a space stays literal |
 
 The console is a canvas: text is laid out on a monospace grid in Courier Prime at `1.25vmax`
 (18 pt on a 1920-wide window; Japanese falls back to the system CJK font), and WebGL composites it
@@ -83,6 +98,26 @@ canvas. Tuning (`charMs`, `fontVmax`, colours, `glow`, `glowTight`/`glowWide`, `
 `beatMs`) is in `CFG` at the top of `console.js`; call `MatrixConsole.refresh()` after changing it
 at runtime.
 
+**Pages:** clicking a prog-link opens the tagged program on its own, under a typed, clickable
+`< BACK` (underlined while hovered); links stack. `< BACK` pops the stack and re-renders the previous
+page instantly (with the one-shot flag below). Back on the startup sequence's page, the sequence
+carries on after it unless that program ends with `<stop/>` — so programs placed after a `<stop/>`
+are reachable only through links.
+
+**One-shot `noDisplayDelay`:** while set, the next program runs with no waits at all — no `<delay>`
+pauses, no typing gaps, and no replace effect (only the `<with>` text) — so its final text appears
+at once; `<cls>` still clears. It turns itself off once that program finishes. It starts OFF; `< BACK` sets it.
+
+**Templates:** a template is just a tagged program used via `<gosub>`. Since tagged programs also
+run in the startup sequence, put templates after a `<stop/>` program so they only appear where
+they're included.
+
+**Returning visitors:** the "cookie" is a presence-only flag in `localStorage`
+(`hypergames.cookie`), so it also works from `file://`. At launch, if the number of programs starting
+with `<landing/>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0
+after the usual rain delay; with the flag, the rain starts immediately and the `<landing/>` program
+runs first (as the base page). Clearing the site's data resets it.
+
 ## JavaScript API
 
 ```js
@@ -91,9 +126,14 @@ MatrixRain.start();                      // resume
 MatrixRain.setConfig({ density: 0.4 });  // change CFG keys and rebuild
 MatrixRain.refresh();                    // re-read panel geometry and rebuild drops
 
-MatrixConsole.run(2);                    // run program 2 now, then carry on cycling from 3
-MatrixConsole.programs.push('Wake up<delay>2000ms</delay><cls>');  // add a program to the cycle
+MatrixConsole.run(2);                    // run program 2 now, then the programs after it
+MatrixConsole.programs.push('Wake up<delay>2000ms</delay><cls>');  // add a program to the end
 MatrixConsole.stop();  MatrixConsole.start();
+MatrixConsole.navigate('about');         // open the program tagged "about" (as if its link was clicked)
+MatrixConsole.navigate('about', { oneWay: true });  // as a one-way link: no < BACK, stack cleared
+MatrixConsole.back();                    // same as clicking < BACK; MatrixConsole.navDepth = stack depth
+MatrixConsole.makeCookie(); MatrixConsole.hasCookie(); MatrixConsole.deleteCookie();  // the returning-visitor flag
+MatrixConsole.noDisplayDelay = true;     // next program appears at once: no delays or replace effect (one-shot)
 ```
 
 ## Notes
