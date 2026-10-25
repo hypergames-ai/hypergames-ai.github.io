@@ -25,6 +25,12 @@
     beatMs: 900,                // heartbeat period: 300 on + 200 fade + 400 dark
     holdMs: 300,                // cursor fully on at the start of each beat
     fadeMs: 200,                // then decays to dark, phosphor-style; dark for the rest of the beat
+    // <freakout>: at full effect the text jiggles by up to freakShake em and blurs to σ = freakBlur em.
+    freakShake: 0.3,
+    freakBlur: 0.15,
+    freakCurve: 5,              // ramp steepness: intensity = (2^(k·p) − 1) / (2^k − 1) over the fade
+    freakHz: 25,                // new jiggle targets per second
+    freakFadeOut: 0.2,          // last fraction of the fade, over which the text fades linearly to invisible
   };
 
   // Cursor geometry in cap heights, measured from the film frame (top raised 0.14 by eye): a block
@@ -50,6 +56,8 @@
   // <bottom-row delta=-1/> to the row above it (delta ≤ 0). Nothing is erased.
   // Rain: <start-rain> starts it (no-op if raining), <stop-rain> lets falling drops finish and
   // forms no more. The rain doesn't start by itself.
+  // <freakout hold="1500ms" fade="3000ms">text</freakout>: text that, once typed, holds still for
+  // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
   // <goto ref="label"> as the very last characters (instead of <stop/>) jumps to that program when
   // this one finishes, like a one-way link.
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
@@ -60,9 +68,10 @@
     'Call trans opt: received. MM-DD-YY HH:MM:SS REC:Log><delay>4000ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>',
     "ALERT - PERIMETER BREACH\n========================\nMODAL ERROR: IR.AA.W1M: ON DEVICE D: AN ILLEGAL MEMORY ACCESS\nERROR: MISSING FILE 'MORPH.BLD.EXE'/'HEART O' THE CITY'\nCODE: 009952310\nCONTENT: モーフィアスはここを去った\n<delay>4000ms</delay><cls>",
     'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
-    '<tag>welcome</tag>Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>1000ms</delay>\n\nhypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<bottom-row delta=-1/><a href="files/HypergamesCoreConcepts.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">See GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n<delay>30000ms</delay><stop make-cookie/>',
-    '<tag>q1</tag>This is an informational page.<delay>1000ms</delay>The Matrix has you<stop/>',
-    '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth." (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: "Whoa, what’s happening????"\n<delay>1500ms</delay><goto ref="breach">',
+    'Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>3000ms</delay>',
+    '<tag>welcome</tag>hypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<bottom-row delta=-1/><a href="files/HypergamesCoreConcepts.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">See GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n<delay>30000ms</delay><stop make-cookie/>',
+    '<tag>q1</tag><freakout hold=1000ms fade=3000ms>This is an informational page.</freakout>\n<delay>1000ms</delay>The Matrix has you<stop/>',
+    '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth." (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
     '<landing/><start-rain><goto ref="welcome">',
   ];
 
@@ -138,6 +147,9 @@
     return w;
   }
 
+  const LINK_KINDS = new Set(['prog', 'broken', 'back', 'url']);
+  const isLink = attr => Boolean(attr && LINK_KINDS.has(attr.kind));
+
   function layout() {
     const maxW = boxW - 2 * padX, maxH = boxH - 2 * padY;
     const cw = CURSOR.w * cap;
@@ -160,26 +172,78 @@
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
-    linkRects = glyphs.filter(g => g[4] && g[4].kind !== 'row').map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
+    linkRects = glyphs.filter(g => isLink(g[4])).map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
   }
 
   const css = c => `rgb(${c.join(',')})`;
 
+  // <freakout> at time `now`: intensity e (0 → 1 on an exponential ramp after the hold), the
+  // string's jiggle offset and its blur σ in CSS px, and its opacity (1 → 0 over the fade's end). t0 is when its text finished typing
+  // (Infinity while it's still typing, -Infinity for an instant render).
+  function freakState(f, now) {
+    const since = now - f.t0 - f.hold;
+    const p = f.fade > 0 ? Math.min(1, Math.max(0, since / f.fade)) : since >= 0 ? 1 : 0;
+    const k = CFG.freakCurve, e = k > 0 ? (2 ** (k * p) - 1) / (2 ** k - 1) : p;
+    const amp = reduceQuery.matches ? 0 : e * CFG.freakShake * fontPx, s = now / 1000 * CFG.freakHz;
+    const out = CFG.freakFadeOut, alpha = p < 1 - out ? 1 : out > 0 ? (1 - p) / out : 0;
+    return { e, alpha, dx: amp * noise(f.seedX, s), dy: amp * noise(f.seedY, s), blur: e * CFG.freakBlur * fontPx,
+             animating: f.t0 !== Infinity && (p < 1 || (amp > 0 && alpha > 0)) };
+  }
+
+  // Jitter: a new random target in [-1, 1] every unit of s, eased into from the previous one.
+  function noise(seed, s) {
+    const i = Math.floor(s), t = s - i, u = t * t * (3 - 2 * t);
+    return hash(seed + i) * (1 - u) + hash(seed + i + 1) * u;
+  }
+
+  function hash(n) {
+    n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+    n = Math.imul(n ^ (n >>> 16), 0x45d9f3b);
+    return ((n ^ (n >>> 16)) >>> 0) / 0x7fffffff - 1;
+  }
+
+  // Blurred text by way of its shadow, which blurs in every browser (ctx.filter doesn't): the glyph
+  // itself lands well off the canvas and the shadow is offset back into place. Shadow offset and
+  // blur ignore the transform, so they're in device px; shadowBlur is 2σ.
+  function fillBlurred(ctx, ch, x, y, sigma) {
+    if (sigma < 0.05) { ctx.fillText(ch, x, y); return; }
+    const off = boxW + 100;
+    ctx.save();
+    ctx.shadowColor = ctx.fillStyle;
+    ctx.shadowBlur = 2 * sigma * dpr;
+    ctx.shadowOffsetX = off * dpr;
+    ctx.shadowOffsetY = 0;
+    ctx.fillText(ch, x - off, y);
+    ctx.restore();
+  }
+
   // Glyphs in their own colours, with link underlines: prog and broken links always, < BACK
-  // only while hovered.
-  function drawGlyphs(ctx) {
+  // only while hovered. Returns whether a <freakout> needs redrawing next frame.
+  function drawGlyphs(ctx, now) {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.font = `${fontPx}px ${FONT_STACK}`;
     ctx.textBaseline = 'alphabetic';
     const ulOff = 0.2 * cap, ulH = Math.max(1 / dpr, 0.08 * cap);
+    const freaks = new Map();                             // one state per <freakout>: it shakes as a whole
+    let animating = false;
     for (const [ch, x, y, w, attr] of glyphs) {
       ctx.fillStyle = css(attr && attr.kind === 'broken' ? CFG.brokenLinkColor : CFG.textColor);
+      if (attr && attr.kind === 'freak') {
+        let f = freaks.get(attr);
+        if (!f) { f = freakState(attr, now); freaks.set(attr, f); animating ||= f.animating; }
+        if (f.alpha <= 0) continue;
+        ctx.globalAlpha = f.alpha;
+        fillBlurred(ctx, ch, x + f.dx, y + f.dy, f.blur);
+        ctx.globalAlpha = 1;
+        continue;
+      }
       ctx.fillText(ch, x, y);
-      if (attr && (attr.kind !== 'back' || attr === hoverLink)) ctx.fillRect(x, y + ulOff, w, ulH);
+      if (isLink(attr) && (attr.kind !== 'back' || attr === hoverLink)) ctx.fillRect(x, y + ulOff, w, ulH);
     }
+    return animating;
   }
 
   // ---- WebGL bloom ---------------------------------------------------------------------------
@@ -346,37 +410,36 @@
   }
 
   // Without WebGL: the same layout on a 2D canvas, glowing with canvas shadows.
-  function render2D(a) {
+  function render2D(a, now) {
     ctx2d.shadowColor = css(CFG.textColor);
     ctx2d.shadowBlur = CFG.glow ? CFG.glowTight[0] * 4 * cap * dpr : 0;
-    drawGlyphs(ctx2d);
+    const animating = drawGlyphs(ctx2d, now);
     ctx2d.globalAlpha = a;
     ctx2d.fillStyle = css(CFG.cursorColor);
     ctx2d.fillRect(cursor.x, cursor.y, cursor.w, cursor.h);
     ctx2d.globalAlpha = 1;
     ctx2d.shadowBlur = 0;
+    return animating;
   }
 
   // ---- Frame loop ----------------------------------------------------------------------------
 
-  let lastA = -1, contextLost = false;
+  let lastA = -1, contextLost = false, animating = false;   // animating: a <freakout> is in motion
 
   function frame(now) {
     requestAnimationFrame(frame);
     if (contextLost || !boxW) return;
     const a = cursorOpacity(now);
-    if (!dirty && a === lastA) return;                    // nothing changed: skip the GPU work
-    if (dirty) {
-      layout();
-      if (gl) {
-        drawGlyphs(sctx);
-        gl.bindTexture(gl.TEXTURE_2D, textTex);
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
-      }
-      dirty = false;
+    if (!dirty && !animating && a === lastA) return;      // nothing changed: skip the GPU work
+    if (dirty) layout();
+    if (gl && (dirty || animating)) {
+      animating = drawGlyphs(sctx, now);
+      gl.bindTexture(gl.TEXTURE_2D, textTex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, src);
     }
+    dirty = false;
     lastA = a;
-    if (gl) renderGL(a); else render2D(a);
+    if (gl) renderGL(a); else animating = render2D(a, now);
   }
 
   function resize() {
@@ -456,7 +519,7 @@
   // A linked page (back = true) gets a typed "< BACK" line after every clear.
   function parse(text, back = false) {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"(\s+one-way)?>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"(\s+one-way)?>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -475,6 +538,11 @@
         ops.push({ delay: Number(m[2] || 0), replaceHold: true }, { erase: [...oldText].length });
         if (m[4]) ops.push({ delay: Number(m[4]), replaceHold: true });
         if (newText) ops.push({ text: newText });
+      } else if (m[13] !== undefined) {
+        // <freakout hold="…ms" fade="…ms">: either order, quotes optional, missing = 0.
+        const at = { hold: 0, fade: 0 };
+        for (const [, k, ms] of m[12].matchAll(/\b(hold|fade)\s*=\s*"?(\d+)ms"?/g)) at[k] = Number(ms);
+        ops.push({ text: m[13], freak: { hold: at.hold, fade: at.fade } });
       } else if (m[0].startsWith('<bottom-row')) {
         ops.push({ bottomRow: Math.min(0, Number(m[11] || 0)) });   // delta: 0 or negative
       } else if (m[9] !== undefined) {
@@ -558,8 +626,13 @@
         // One link object per occurrence, shared by its characters (hover highlights just this one).
         const attr = op.back ? { kind: 'back' }
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay }
-          : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab } : null;
-        if (skip) { for (const ch of op.text) typeChar(ch, attr); continue; }
+          : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
+          : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
+        if (skip) {
+          for (const ch of op.text) typeChar(ch, attr);
+          if (op.freak) attr.t0 = -Infinity;              // the final state: full freakout, faded away
+          continue;
+        }
         setTyping(true);                                  // steady while typing, heartbeat when idle
         // Type to a schedule, not a fixed sleep per character: timers always fire a little late,
         // and that lateness would add up. Sleep only when ahead; when behind, type straight away.
@@ -572,6 +645,7 @@
           else if (g !== gen) throw ABORT;
           typeChar(ch, attr);
         }
+        if (op.freak) { attr.t0 = performance.now(); dirty = true; }   // its hold starts once it's all there
         setTyping(false);
       }
     }
@@ -598,6 +672,8 @@
     setTimeout(() => { if (gen === g) run(i); }, 0);
     return 'goto';
   }
+
+  const randomSeed = () => Math.floor(Math.random() * 0x40000000);
 
   // The one place to change program order (e.g. random cycling later). -1 = no more programs.
   function nextProgram() {

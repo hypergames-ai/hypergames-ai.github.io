@@ -91,6 +91,7 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | `<a href="…" target="_blank">` | Always open in a new tab |
 | `<gosub ref="label"/>` | Pastes the program tagged *label* in place, as if written there: its text types and its commands (`<delay>`, `<cls>`, links, `<delete-cookie/>`, …) run inline. Its own `<tag>`/`<landing/>`/`<stop …/>` are ignored. Templates can include templates; cycles and missing refs paste nothing |
 | `<bottom-row/>`, `<bottom-row delta=-1/>` | Moves the write head and cursor to the left edge of the panel's last visible row, or `delta` rows above it (`delta` ≤ 0). Nothing is erased; text written there draws over whatever is on that row. Re-anchors when the window resizes |
+| `<freakout hold="1500ms" fade="3000ms">text</freakout>` | Types *text* normally; once it's all typed it holds still for `hold`, then shakes (a noisy x/y jiggle of the whole string) and blurs, both ramping up exponentially over `fade`; during the last 20% of `fade` it also fades linearly to invisible, and stays gone (the space it took stays empty). Quotes optional, either order, missing = 0 ms. Plain text only inside. An instant render shows the end state (nothing); under `prefers-reduced-motion` it blurs and fades without shaking |
 | `<start-rain>` | Starts the rain: drops begin falling in a staggered wave. No-op if it's already raining. The rain never starts by itself |
 | `<stop-rain>` | Stops the rain: drops already falling finish (and splash), no new ones form |
 | any other `<tag …>` | Not displayed (silently ignored); `<` followed by a space stays literal |
@@ -103,7 +104,8 @@ halfway between the film's pale mint and the rain's green. The cursor is a block
 characters wide: steady while typing; when idle it beats every 900 ms — on for 300 ms, fading out
 over 200 ms, then dark for 400 ms. It stays steady under `prefers-reduced-motion`. Without WebGL it falls back to a 2D
 canvas. Tuning (`charMs`, `fontVmax`, colours, `glow`, `glowTight`/`glowWide`, `holdMs`, `fadeMs`,
-`beatMs`) is in `CFG` at the top of `console.js`; call `MatrixConsole.refresh()` after changing it
+`beatMs`, and for `<freakout>`: `freakShake` (max jiggle, em), `freakBlur` (max blur σ, em),
+`freakCurve` (ramp steepness), `freakHz` (jiggle rate), `freakFadeOut` (fraction of `fade` spent fading out)) is in `CFG` at the top of `console.js`; call `MatrixConsole.refresh()` after changing it
 at runtime.
 
 **Pages:** clicking a prog-link opens the tagged program on its own, under a typed, clickable
@@ -113,7 +115,7 @@ carries on after it unless that program ends with `<stop/>` — so programs plac
 are reachable only through links.
 
 **One-shot `noDisplayDelay`:** while set, the next program runs with no waits at all — no `<delay>`
-pauses, no typing gaps, and no replace effect (only the `<with>` text) — so its final text appears
+pauses, no typing gaps, and no replace effect (only the `<with>` text; `<freakout>` text already faded away) — so its final text appears
 at once; `<cls>` still clears. It turns itself off once that program finishes. It starts OFF; `< BACK` sets it.
 
 **Footers:** `Content…<bottom-row/>FOOTER TEXT<bottom-row delta=-1/>` puts the footer on the last
