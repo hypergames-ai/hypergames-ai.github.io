@@ -5,7 +5,7 @@
   'use strict';
 
   const CFG = {
-    charMs: 18,                 // mean gap between typed characters
+    charMs: 16,                 // mean gap between typed characters
     jitter: 0.5,                // ± fraction of charMs, so typing doesn't tick like a metronome
     eraseMinMs: 30,            // <replace>: gap between backspace pecks, random in [min, max]
     eraseMaxMs: 100,
@@ -46,6 +46,8 @@
   // <prog ref="label">text</prog> links to it (underlined, clickable; grey if no such tag); a
   // followed link shows that program under a clickable "< BACK". <prog ref="label" one-way> has no
   // BACK: the linked program becomes the base page and the nav stack starts over from it.
+  // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
+  // stacking on it, so BACK skips it; on the base page it does nothing.
   // Returning visitors: <stop make-cookie/> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie/> clears it. At launch, if exactly one program starts with <landing/>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
@@ -519,7 +521,7 @@
   // A linked page (back = true) gets a typed "< BACK" line after every clear.
   function parse(text, back = false) {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"(\s+one-way)?>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -528,7 +530,7 @@
       else if (m[0] === '<cls>') ops.push({ cls: true });
       else if (m[0] === '<delete-cookie/>') ops.push({ deleteCookie: true });
       else if (/^<(start|stop)-rain\s*\/?>$/.test(m[0])) ops.push({ rain: m[0].startsWith('<start') });
-      else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: Boolean(m[7]) });
+      else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: /one-way/.test(m[7]), noStack: /no-stack/.test(m[7]) });
       else if (m[3] !== undefined) {
         // <replace>: old and new are plain text (tags stripped), so the backspace count is exact.
         // The <replace> hold runs before backspacing; the <with> hold after it, before new is typed.
@@ -562,7 +564,7 @@
 
   // The "cookie": a presence-only flag in localStorage (works from file://, no expiry to manage).
   // Blocked storage reads as "no cookie" and ignores writes.
-  const COOKIE_KEY = 'hypergames.cookie';
+  const COOKIE_KEY = 'skip_long_intro';
   function makeCookie() { try { localStorage.setItem(COOKIE_KEY, '1'); } catch (e) { /* storage blocked */ } }
   function deleteCookie() { try { localStorage.removeItem(COOKIE_KEY); } catch (e) { /* storage blocked */ } }
   function hasCookie() { try { return localStorage.getItem(COOKIE_KEY) !== null; } catch (e) { return false; } }
@@ -625,7 +627,7 @@
       } else {
         // One link object per occurrence, shared by its characters (hover highlights just this one).
         const attr = op.back ? { kind: 'back' }
-          : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay }
+          : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
         if (skip) {
@@ -725,11 +727,14 @@
   }
 
   // A one-way link has no < BACK: it clears the stack and makes the program the base page, as run() does.
-  function navigate(label, { oneWay = false } = {}) {
+  // A no-stack link replaces the current page instead of stacking on it, so BACK skips that page;
+  // the base page can't be replaced, so from there it's a no-op.
+  function navigate(label, { oneWay = false, noStack = false } = {}) {
     const i = taggedIndex(label);
     if (i < 0) return;                                    // broken link: no-op
     if (oneWay) { run(i); return; }
-    navStack.push(pageIndex);
+    if (noStack && !navStack.length) return;
+    if (!noStack) navStack.push(pageIndex);
     showPage(i);
   }
 
@@ -779,7 +784,7 @@
   canvas.addEventListener('pointerleave', () => setHover(null));
   canvas.addEventListener('click', e => {
     const link = linkAt(e);
-    if (link && link.kind === 'prog') navigate(link.ref, { oneWay: link.oneWay });
+    if (link && link.kind === 'prog') navigate(link.ref, { oneWay: link.oneWay, noStack: link.noStack });
     else if (link && link.kind === 'back') back();
     else if (link && link.kind === 'url') followUrl(link, e.ctrlKey || e.metaKey);
   });

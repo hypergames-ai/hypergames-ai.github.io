@@ -82,6 +82,7 @@ its text one character at a time (`CFG.charMs`, default 18 ms, ±50% jitter). Pr
 | `<tag>label</tag>` (very first characters) | Names the program, for links; label is `a-z`, `0-9`, `_`. Not displayed |
 | `<prog ref="label">text</prog>` | A clickable, underlined link to the program tagged *label* (no tags inside *text*). Grey, still underlined, and inert if no program has that tag |
 | `<prog ref="label" one-way>text</prog>` | Same, but the linked program shows without `< BACK` and becomes the base page: the nav stack starts over from it |
+| `<prog ref="label" no-stack>text</prog>` | On a page with `< BACK`: the linked program replaces the current page instead of stacking on it, so its `< BACK` goes where the current page's would have. Chain main → a → b → c with no-stack links from a and b, and BACK from any of them returns to main. On the base page it does nothing. With `one-way` too, `one-way` wins |
 | `<stop/>` (very last characters) | The startup sequence stops after this program |
 | `<goto ref="label">` (very last characters, instead of `<stop/>`) | When the program finishes, jumps to the program tagged *label* like a one-way link: nav stack cleared, the target becomes the base page and the sequence carries on from it. Doesn't fire if the program is cut short; a missing tag stops like `<stop/>`; ignored inside `<gosub>` templates |
 | `<stop make-cookie/>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
@@ -147,6 +148,7 @@ MatrixConsole.programs.push('Wake up<delay>2000ms</delay><cls>');  // add a prog
 MatrixConsole.stop();  MatrixConsole.start();
 MatrixConsole.navigate('about');         // open the program tagged "about" (as if its link was clicked)
 MatrixConsole.navigate('about', { oneWay: true });  // as a one-way link: no < BACK, stack cleared
+MatrixConsole.navigate('about', { noStack: true }); // as a no-stack link: replaces the current page
 MatrixConsole.back();                    // same as clicking < BACK; MatrixConsole.navDepth = stack depth
 MatrixConsole.makeCookie(); MatrixConsole.hasCookie(); MatrixConsole.deleteCookie();  // the returning-visitor flag
 MatrixConsole.noDisplayDelay = true;     // next program appears at once: no delays or replace effect (one-shot)
