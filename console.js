@@ -65,15 +65,15 @@
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
   // download instead, target="_blank" for a new tab).
   const PROGRAMS = [
-    '<tag>start</tag><cls><delay>1500ms</delay><start-rain><delay>700ms</delay>',
-    '<tag>breach</tag><cls>Modal 101 Breach/USER Violation\nHost Alarm KIWW/HH:MM<delay>2500ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>File not found<delay>1500ms</delay><cls>',
-    'Call trans opt: received. MM-DD-YY HH:MM:SS REC:Log><delay>4000ms</delay><cls>Trace program: running<delay>3000ms</delay><cls>',
+    '<tag>start</tag><cls><delay>2200ms</delay>',
+    '<tag>breach</tag><cls>Modal<start-rain> 101 Breach/USER Violation\nHost Alarm KIWW/HH:MM<delay>2300ms</delay><cls>Trace program: running<delay>2500ms</delay><cls>File not found<delay>1500ms</delay><cls>',
+    'Call trans opt: received. MM-DD-YY HH:MM:SS REC:Log><delay>4000ms</delay><cls>Trace program: running<delay>2500ms</delay><cls>',
     "ALERT - PERIMETER BREACH\n========================\nMODAL ERROR: IR.AA.W1M: ON DEVICE D: AN ILLEGAL MEMORY ACCESS\nERROR: MISSING FILE 'MORPH.BLD.EXE'/'HEART O' THE CITY'\nCODE: 009952310\nCONTENT: モーフィアスはここを去った\n<delay>4000ms</delay><cls>",
     'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
     'Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>3000ms</delay>',
-    '<tag>welcome</tag>hypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<bottom-row delta=-1/><a href="files/HypergamesCoreConcepts.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">See GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n<delay>30000ms</delay><stop make-cookie/>',
+    '<tag>welcome</tag>hypergames.ai is an information 𝕏 website.\nFind out <prog ref="q1">more</prog> here.\n<bottom-row delta=-1/><a href="files/HypergamesWhitepaper.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n<delay>30000ms</delay><stop make-cookie/>',
     '<tag>q1</tag><freakout hold=1000ms fade=3000ms>This is an informational page.</freakout>\n<delay>1000ms</delay>The Matrix has you<stop/>',
-    '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth." (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
+    '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth."<delay>800ms</delay> (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
     '<landing/><start-rain><goto ref="welcome">',
   ];
 
