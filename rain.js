@@ -18,6 +18,7 @@
     splashMin: 8, splashMax: 14,
     maxParticles: 400,
     colors: { head: '#e6ffe6', body: '#00ff41', bg: '#000' },
+    fontWeight: 400,            // rain glyph weight: 'normal' (400), 'bold' (700) or 100–900
     reducedMotion: 'auto',      // honours prefers-reduced-motion: halves density and speed
   };
 
@@ -102,7 +103,7 @@
     sprite = Math.ceil(cellDev);
     sheet.width = sprite * GLYPHS.length;
     sheet.height = sprite * 2;
-    sheetCtx.font = `${cellDev}px ${FONT}`;
+    sheetCtx.font = `${CFG.fontWeight} ${cellDev}px ${FONT}`;
     sheetCtx.textBaseline = 'top';
     sheetCtx.textAlign = 'center';
     [CFG.colors.head, CFG.colors.body].forEach((color, row) => {

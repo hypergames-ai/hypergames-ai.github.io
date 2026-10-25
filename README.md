@@ -63,6 +63,7 @@ aligned.
 | `splashMin`, `splashMax` | `8`, `14` | Particles per splash |
 | `maxParticles` | `400` | Hard cap on live particles |
 | `colors` | head `#e6ffe6`, body `#00ff41`, bg `#000` | Hex colours (`#rrggbb` for head and body) |
+| `fontWeight` | `400` | Rain glyph weight: `'normal'` (400), `'bold'` (700) or `100`–`900`. In-between weights need the font to have them: the katakana (Hiragino on macOS) do, but Menlo's digits only have regular and bold, switching at 600 |
 | `reducedMotion` | `'auto'` | `'auto'` follows `prefers-reduced-motion`; `true`/`false` force it. Reduced = half density, half speed |
 
 ## Console
