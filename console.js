@@ -93,20 +93,23 @@
     '<tag>breach</tag><cls>Modal<start-rain> 101 Breach/USER Violation\nHost Alarm KIWW/HH:MM<delay>2300ms</delay><cls>Trace program: running<delay>2500ms</delay><cls>File not found<delay>1500ms</delay><cls>',
     'Call trans opt: received. MM-DD-YY HH:MM:SS REC:Log><delay>4000ms</delay><cls>Trace program: running<delay>2500ms</delay><cls>',
     "ALERT - PERIMETER BREACH\n========================\nMODAL ERROR: IR.AA.W1M: ON DEVICE D: AN ILLEGAL MEMORY ACCESS\nERROR: MISSING FILE 'MORPH.BLD.EXE'/'HEART O' THE CITY'\nCODE: 009952310\nCONTENT: モーフィアスはここを去った\n<delay>4000ms</delay><cls>",
-    'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
-    '<tag>welcome</tag>Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>3000ms</delay><in-startup><goto ref="i1"><else></in-startup>',
-    //\n<gosub ref="footer">', <delay>30000ms</delay><stop make-cookie>
+    'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay><in-startup><start-rain><delay>1000ms</delay><goto ref="i1"><else></in-startup>',
+    //'Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>3000ms</delay>',
     
+    // Main Menu
+    '<tag>welcome</tag>MAIN MENU\n\n<prog ref="i1">INTRO</prog><grey>  Why we do what we do</grey><gosub ref="footer"><delay>30000ms</delay><stop make-cookie>',
+
     // Intro to cybernetic humans...
-    '<tag>i1</tag><slow-spew>Billions of people<delay>250ms</delay> just<delay>200ms</delay> living out their lives... <delay>400ms</delay><normal-spew>oblivious<slow-spew><delay>800ms</delay>\n\nOblivious<delay>333ms</delay> to the fact they are increasingly becoming <high>cybernetic</high><delay>1000ms</delay>\n\nWhen video games arrived, cyberspace was behind the screen, inaccessible, a fourth wall.\nCyberspace was THERE<delay>1000ms</delay>\n\nAnd when smartphones arrived, we could now tunnel through the fourth wall into cyberspace.\nWE could now go THERE, together<delay>1000ms</delay>\n\nWith 3D AR headgear, the fourth wall is finally gone.\nTHERE can now come HERE...<delay>2000ms</delay><normal-spew><prog ref="i2" no-stack>CONTINUE</prog><stop>',
-    '<tag>i2</tag>Second page<normal-spew><prog ref="i2">CONTINUE</prog> ><gosub ref="footer"><stop>',
+    '<tag>i1</tag><slow-spew>Billions of people<delay>250ms</delay> just<delay>200ms</delay> living out their lives... <delay>400ms</delay><normal-spew>oblivious<slow-spew><delay>800ms</delay>\n\nOblivious<delay>333ms</delay> to the fact they are increasingly becoming <high>cybernetic</high><delay>1000ms</delay>\n\nWhen video games arrived, cyberspace was behind the screen, inaccessible, a fourth wall.\nCyberspace was THERE<delay>1000ms</delay>\n\nAnd when smartphones arrived, we could now tunnel through the fourth wall.\nWE could now go THERE<delay>1000ms</delay>\n\nWith 3D AR headgear, the fourth wall is finally gone.\nTHERE can now come HERE... <delay>2000ms</delay><normal-spew> <prog ref="i2" no-stack>CONTINUE</prog><stop>',
+    '<tag>i2</tag>Second page<normal-spew>\n\n\n<prog ref="i2">CONTINUE</prog> ><gosub ref="footer"><stop>',
     '<tag>q2</tag><video-embed ref=YJg02ivYzSs t=222><center>With 2D AR Glasses=accessories, 3D=prosthetics.<bottom-row delta=1></center><stop>',
     
 
-    '<tag>footer</tag><bottom-row delta=-1><a href="RedPillWhitepaper.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n',
-    '<tag>q1</tag><freakout hold=1000ms fade=3000ms>This is an informational page.</freakout>\n<delay>1000ms</delay>The Matrix has you<stop>',
+    // footer
+    '<tag>footer</tag><bottom-row delta=0><a href="RedPillWhitepaper.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">Fun GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog><bottom-row delta=1>',
+
     '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth."<delay>800ms</delay> (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
-    '<landing><start-rain><goto ref="i1">',
+    '<landing><start-rain><goto ref="welcome">',
   ];
 
   const FONT_STACK = "'Courier Prime', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', monospace";
