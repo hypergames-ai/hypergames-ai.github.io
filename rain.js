@@ -18,6 +18,7 @@
     splashMin: 8, splashMax: 14,
     maxParticles: 400,
     colors: { head: '#e6ffe6', body: '#00ff41', bg: '#000' },
+    goldColors: { head: '#ffffff', body: '#ffffc3' },   // "mainframe" rain after <gold-rain>: amber-leaning yellow
     fontWeight: 400,            // rain glyph weight: 'normal' (400), 'bold' (700) or 100–900
     reducedMotion: 'auto',      // honours prefers-reduced-motion: halves density and speed
   };
@@ -30,7 +31,9 @@
   const DASH_U = 0.25;          // splat dash thickness in u
   const DEG = Math.PI / 180;
   const FONT = 'ui-monospace, Menlo, Consolas, monospace';
-  const HEAD = 0, BODY = 1;     // sprite sheet rows
+  // Sprite sheet rows: head and body per palette (0 green, 1 gold), so palette p is rows 2p, 2p + 1.
+  const palettes = () => [CFG.colors, CFG.goldColors];
+  const PALETTE_NAMES = ['green', 'gold'];
 
   // Half-width katakana U+FF66–U+FF9D, digits, a little ASCII.
   let GLYPHS = '';
@@ -56,12 +59,14 @@
   let glyphGrid = new Uint8Array(0);   // glyph each cell currently shows
   let alphaGrid = new Float32Array(0); // brightness this frame: the brightest drop covering the cell
   let headGrid = new Uint8Array(0);    // 1 where a drop's head is
+  let colorGrid = new Uint8Array(0);   // palette of the drop that lights the cell brightest
   let hiddenGrid = new Uint8Array(0);  // 1 where the cell is entirely behind the panel
-  let particles = [];           // { x, y, vx, vy, age, life, size } in px, px/s, s
-  let dashes = [];              // { x, age } splat marks on the panel's top edge
+  let particles = [];           // { x, y, vx, vy, age, life, size, color } in px, px/s, s
+  let dashes = [];              // { x, age, color } splat marks on the panel's top edge
   let fxDirty = false;          // #fx still shows something that needs clearing
   let simTime = 0;              // seconds of simulated time; drives drop waits
   let raining = false;          // startRain()/stopRain(): when off, finished drops don't respawn
+  let rainColor = 0;            // palette for drops that start from now on; falling drops keep theirs
   let running = false, rafId = 0, last = 0, acc = 0;
 
   const rand = (a, b) => a + Math.random() * (b - a);
@@ -69,7 +74,7 @@
   const randGlyph = () => (Math.random() * GLYPHS.length) | 0;
 
   function newDrop(x) {
-    const d = { x, y: 0, speed: 0, lastCell: 0, tail: 0, decay: 0, reach: 0,
+    const d = { x, y: 0, speed: 0, lastCell: 0, tail: 0, decay: 0, reach: 0, color: rainColor,
                 state: 'waiting', waitUntil: 0, splatters: false, splashed: false,
                 active: Math.random() < CFG.density * motion };
     if (raining) firstWave(d);
@@ -95,18 +100,19 @@
     d.lastCell = Math.floor(d.y);
     d.splatters = Math.random() < CFG.splashChance;
     d.splashed = false;
+    d.color = rainColor;
     d.state = 'falling';
   }
 
-  // Every glyph, pre-mirrored, in head and body colour, at the current device-pixel cell size.
+  // Every glyph, pre-mirrored, in each palette's head and body colour, at the current device-pixel cell size.
   function buildSprites() {
     sprite = Math.ceil(cellDev);
     sheet.width = sprite * GLYPHS.length;
-    sheet.height = sprite * 2;
+    sheet.height = sprite * 2 * palettes().length;
     sheetCtx.font = `${CFG.fontWeight} ${cellDev}px ${FONT}`;
     sheetCtx.textBaseline = 'top';
     sheetCtx.textAlign = 'center';
-    [CFG.colors.head, CFG.colors.body].forEach((color, row) => {
+    palettes().flatMap(p => [p.head, p.body]).forEach((color, row) => {
       sheetCtx.fillStyle = color;
       for (let i = 0; i < GLYPHS.length; i++) {
         // Clip to the sprite's own cell: some glyphs overshoot the em box and would bleed
@@ -143,7 +149,7 @@
         if (d.splatters && !d.splashed && prevBottom < panelRect.top && newBottom >= panelRect.top &&
             cx >= panelRect.left && cx < panelRect.right) {
           d.splashed = true;
-          splash(cx);
+          splash(cx, d.color);
         }
 
         // The head writes a fresh glyph into each cell it enters; trails show what's written.
@@ -182,9 +188,9 @@
       for (let c = Math.min(cur - 1, rows - 1); c >= 0; c--) {
         const a = Math.exp(d.decay * (d.y - c - 1));
         if (a < TRAIL_CUTOFF) break;
-        if (a > alphaGrid[base + c]) alphaGrid[base + c] = a;
+        if (a > alphaGrid[base + c]) { alphaGrid[base + c] = a; colorGrid[base + c] = d.color; }
       }
-      if (cur >= 0 && cur < rows) { alphaGrid[base + cur] = 1; headGrid[base + cur] = 1; }
+      if (cur >= 0 && cur < rows) { alphaGrid[base + cur] = 1; headGrid[base + cur] = 1; colorGrid[base + cur] = d.color; }
     }
 
     for (let x = 0, i = 0; x < cols; x++) {
@@ -193,14 +199,14 @@
         const a = alphaGrid[i];
         if (!a || hiddenGrid[i]) continue;
         ctx.globalAlpha = a;
-        ctx.drawImage(sheet, glyphGrid[i] * sprite, headGrid[i] ? 0 : sprite, sprite, sprite,
+        ctx.drawImage(sheet, glyphGrid[i] * sprite, (colorGrid[i] * 2 + (headGrid[i] ? 0 : 1)) * sprite, sprite, sprite,
                       x0, Math.round(y * cellDev), sprite, sprite);
       }
     }
     ctx.globalAlpha = 1;
   }
 
-  function splash(cx) {
+  function splash(cx, color) {
     const top = panelRect.top;
     const n = Math.round(rand(CFG.splashMin, CFG.splashMax));
     for (let i = 0; i < n && particles.length < CFG.maxParticles; i++) {
@@ -208,9 +214,9 @@
       const a = (-90 + 70 * (Math.random() + Math.random() - 1)) * DEG;
       const s = rand(12, 36) * u;
       particles.push({ x: cx, y: top, vx: Math.cos(a) * s, vy: Math.sin(a) * s,
-                       age: 0, life: rand(0.3, 0.7), size: rand(0.15, 0.35) * u });
+                       age: 0, life: rand(0.3, 0.7), size: rand(0.15, 0.35) * u, color });
     }
-    dashes.push({ x: cx - cell / 2, age: 0 });
+    dashes.push({ x: cx - cell / 2, age: 0, color });
   }
 
   function stepParticles() {
@@ -246,8 +252,8 @@
     fxCtx.rect(r.left + b, r.top + b, r.width - 2 * b, r.height - 2 * b);
     fxCtx.clip('evenodd');
 
-    const [hr, hg, hb] = HEAD_RGB, [br, bg, bb] = BODY_RGB;
     for (const p of particles) {
+      const [[hr, hg, hb], [br, bg, bb]] = PAL_RGB[p.color];
       const t = p.age / p.life;
       fxCtx.globalAlpha = 1 - t;
       fxCtx.fillStyle = `rgb(${hr + (br - hr) * t | 0}, ${hg + (bg - hg) * t | 0}, ${hb + (bb - hb) * t | 0})`;
@@ -255,8 +261,8 @@
     }
 
     const t = DASH_U * u;
-    fxCtx.fillStyle = CFG.colors.head;
     for (const d of dashes) {
+      fxCtx.fillStyle = palettes()[d.color].head;
       fxCtx.globalAlpha = 1 - d.age / DASH_LIFE;
       fxCtx.fillRect(d.x, r.top - t, cell, t + b);
     }
@@ -264,7 +270,8 @@
   }
 
   const hexRGB = hex => { const v = parseInt(hex.slice(1), 16); return [v >> 16 & 255, v >> 8 & 255, v & 255]; };
-  let HEAD_RGB = hexRGB(CFG.colors.head), BODY_RGB = hexRGB(CFG.colors.body);
+  const paletteRGB = () => palettes().map(p => [hexRGB(p.head), hexRGB(p.body)]);   // [[head], [body]] per palette
+  let PAL_RGB = paletteRGB();
 
   function frame(now) {
     if (!running) return;
@@ -307,8 +314,7 @@
     particles = [];             // pixel positions are meaningless at the new size
     dashes = [];
     fxDirty = false;            // #fx was just cleared by the resize
-    HEAD_RGB = hexRGB(CFG.colors.head);
-    BODY_RGB = hexRGB(CFG.colors.body);
+    PAL_RGB = paletteRGB();
     buildSprites();
 
     // Drop state is in cells, so it survives a resize unless the column count changes.
@@ -319,6 +325,7 @@
       glyphGrid = Uint8Array.from({ length: cols * rows }, randGlyph);
       alphaGrid = new Float32Array(cols * rows);
       headGrid = new Uint8Array(cols * rows);
+      colorGrid = new Uint8Array(cols * rows);
     }
     if (rebuild) {
       drops = [];
@@ -388,12 +395,21 @@
 
   function stopRain() { raining = false; }
 
+  // Rain colour (console <gold-rain>/<green-rain>): drops that start from now on take it; drops
+  // already falling keep theirs, so the switch spreads as old drops finish. Unknown names are ignored.
+  function setRainColor(name) {
+    const i = PALETTE_NAMES.indexOf(name);
+    if (i >= 0) rainColor = i;
+  }
+
   window.MatrixRain = {
     start() { wantRunning = true; start(); },            // animation loop (pause/resume)
     stop() { wantRunning = false; stop(); },
     startRain,
     stopRain,
     get raining() { return raining; },
+    setRainColor,
+    get rainColor() { return PALETTE_NAMES[rainColor]; },
     setConfig,
     refresh,
   };

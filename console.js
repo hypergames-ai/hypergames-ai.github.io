@@ -6,6 +6,7 @@
 
   const CFG = {
     charMs: 16,                 // mean gap between typed characters
+    slowCharMs: 60,             // the gap after <slow-spew> (<normal-spew> returns to charMs)
     jitter: 0.5,                // ± fraction of charMs, so typing doesn't tick like a metronome
     eraseMinMs: 30,            // <replace>: gap between backspace pecks, random in [min, max]
     eraseMaxMs: 100,
@@ -18,6 +19,8 @@
     textColor: [68, 232, 127],
     cursorColor: [99, 237, 139],
     brokenLinkColor: [128, 128, 128],   // <prog> links whose tag doesn't exist
+    grayTextColor: [128, 128, 128],     // <gray-text>: de-emphasised text
+    highTextColor: [150, 255, 180],     // <high>: emphasised text (drawn bold, too)
     glow: false,                // bloom off for now (it showed a grid pattern on real GPUs)
     glowColor: [55, 127, 107],  // phosphor bloom is greener than the near-white cores it surrounds
     glowTight: [0.05, 0.35],    // [σ in cap heights, strength]: the halo hugging each glyph
@@ -47,21 +50,42 @@
   // followed link shows that program under a clickable "< BACK". <prog ref="label" one-way> has no
   // BACK: the linked program becomes the base page and the nav stack starts over from it.
   // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
-  // stacking on it, so BACK skips it; on the base page it does nothing.
+  // stacking on it, so BACK skips it; on the base page it acts as one-way (no BACK).
   // Returning visitors: <stop make-cookie/> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie/> clears it. At launch, if exactly one program starts with <landing/>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
   // first; otherwise the flag is cleared and program 0 runs. Unrecognised tags render as nothing. <stop/> as the very last
   // characters ends the startup sequence after that program.
+  // <have-cookie>yes<else>no</have-cookie>: when the program starts, the branch for the flag's
+  // state replaces the block verbatim and is then run as usual (<else> required; either branch may
+  // be empty; blocks nest; a branch may hold the closing <stop/> or <goto>). Keep <landing/> and
+  // <tag> outside it.
+  // <in-startup>yes<else>no</in-startup>: the same, on whether the startup sequence is still on
+  // (true from launch until a program ends the sequence with <stop/> or the programs run out; a
+  // <goto> carries it on; false from the start when launch goes straight to the <landing/> program).
   // Templates: <gosub ref="label"/> pastes that tagged program in place; its commands run inline.
   // <bottom-row/> moves the write head (and cursor) to the left edge of the last visible row;
-  // <bottom-row delta=-1/> to the row above it (delta ≤ 0). Nothing is erased.
+  // <bottom-row delta=-1/> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row delta=1/>
+  // parks the cursor one row below the bottom row, out of the way (nothing should be typed after it).
+  // <top-row/> moves it to the left edge of the top row; <top-row delta=2/> to 2 rows below it
+  // (delta ≥ 0; the caller keeps it within the panel).
   // Rain: <start-rain> starts it (no-op if raining), <stop-rain> lets falling drops finish and
-  // forms no more. The rain doesn't start by itself.
+  // forms no more. The rain doesn't start by itself. <gold-rain>/<green-rain> set the colour of
+  // drops that start from then on (green at launch); drops already falling keep theirs.
+  // Typing speed: <slow-spew> types at slowCharMs from there on, <normal-spew> back at charMs.
+  // Every program starts at normal speed.
+  // <gray-text>text</gray-text>: text (links and other tags inside included) in grey rather than
+  // green, to de-emphasise it. Every program starts green.
+  // <high>text</high>: the opposite: lighter green and bold (not to be combined with <gray-text>).
   // <freakout hold="1500ms" fade="3000ms">text</freakout>: text that, once typed, holds still for
   // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
   // <goto ref="label"> as the very last characters (instead of <stop/>) jumps to that program when
   // this one finishes, like a one-way link.
+  // <video-embed ref=YOUTUBE_ID t=SEC/> (t optional: start offset in seconds): a 16:9 YouTube player (click to play, loops) in the text area from
+  // the current row down to just above the bottom row; text after it goes on the bottom row.
+  // Removed by the next clear.
+  // <center>text</center>: text centred horizontally on its line (it must fit on one line;
+  // tags inside work as usual).
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
   // download instead, target="_blank" for a new tab).
   const PROGRAMS = [
@@ -86,8 +110,12 @@
 
   // ---- Screen state -------------------------------------------------------------------------
 
-  // <bottom-row> is kept in the screen text as this marker, so re-layout (and resizes) re-anchor it.
+  // <bottom-row>/<top-row> is kept in the screen text as this marker, so re-layout (and resizes) re-anchor it.
   const ROW_MARK = '\uE000';
+  // <video-embed> likewise: layout() places the video from wherever this marker falls.
+  const VIDEO_MARK = '\uE001';
+  // <center>: moves the write head so the text up to </center> ends up centred on its line.
+  const CENTER_MARK = '\uE002';
   let screenText = '';
   let attrs = [];                // per code point of screenText: null, or the link object it belongs to
   let typing = false;
@@ -151,32 +179,70 @@
 
   const LINK_KINDS = new Set(['prog', 'broken', 'back', 'url']);
   const isLink = attr => Boolean(attr && LINK_KINDS.has(attr.kind));
+  const GRAY = { gray: true };   // the attr of plain text inside <gray-text>
+  const HIGH = { high: true };   // and inside <high>
 
   function layout() {
     const maxW = boxW - 2 * padX, maxH = boxH - 2 * padY;
     const cw = CURSOR.w * cap;
     const bottomRow = Math.max(0, Math.floor(maxH / lineH) - 1);   // last row that fits entirely
     const placed = [];
-    let x = 0, line = 0, k = 0;
+    let x = 0, line = 0, k = 0, video = null, videoTop = 0;
+    let parked = false;            // after <bottom-row delta=1/>, before any more text: the cursor's out of sight
     for (const ch of screenText) {                       // by code point, so CJK stays whole
       const attr = attrs[k++];
-      if (ch === '\n') { x = 0; line++; continue; }
-      if (ch === ROW_MARK) { x = 0; line = Math.max(0, bottomRow + attr.delta); continue; }   // <bottom-row>
+      if (ch === '\n') { x = 0; line++; parked = false; continue; }
+      if (ch === ROW_MARK) { x = 0; line = attr.row ?? Math.max(0, bottomRow + attr.delta); parked = attr.delta > 0; continue; }   // <bottom-row>, <top-row>
+      if (ch === CENTER_MARK) {                          // <center>: start where the whole run will be centred
+        let runW = 0;
+        for (const c of attr.text) runW += charWidth(c);
+        x = Math.max(x, (maxW - runW) / 2);              // never back over text already on the line
+        continue;
+      }
+      if (ch === VIDEO_MARK) {                           // <video-embed>: from the next whole row; text after it goes on the bottom row
+        video = attr; videoTop = x > 0 ? line + 1 : line; x = 0; line = bottomRow; continue;
+      }
       const w = charWidth(ch);
       if (x > 0 && x + w > maxW) { x = 0; line++; }
       placed.push([ch, x, line, w, attr]);
       x += w;
+      parked = false;
     }
     let cx = x > 0 ? x + cursorOffset : 0;
     if (cx > 0 && cx + cw > maxW) { cx = 0; line++; }
-    // If the text ever outgrows the panel, scroll so the cursor's line stays visible.
-    const scroll = Math.max(0, (line + 1) * lineH - maxH);
+    // If the text ever outgrows the panel, scroll so the cursor's line stays visible (not a
+    // parked cursor's: that row is below the last one on purpose).
+    const scroll = Math.max(0, ((parked ? bottomRow : line) + 1) * lineH - maxH);
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
+    placeVideo(video, padY + videoTop * lineH - scroll, Math.max(0, bottomRow - videoTop) * lineH);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
     linkRects = glyphs.filter(g => isLink(g[4])).map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
   }
+  // <video-embed ref=id/>: one 16:9 YouTube player in the text area between the row where the tag
+  // ran and the bottom row (kept free for a label and links): as large as fits, horizontally
+  // centred, top-aligned. Click to play; loops. It goes with
+  // the screen: the next clear (any navigation, <cls>) leaves no marker, so it's removed.
+  let videoFrame = null;
+  function placeVideo(attr, top, areaH) {
+    if (!attr) { if (videoFrame) { videoFrame.remove(); videoFrame = null; } return; }
+    if (!videoFrame) {
+      videoFrame = document.createElement('iframe');
+      videoFrame.id = 'video';
+      videoFrame.title = 'YouTube video';
+      videoFrame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+      videoFrame.allowFullscreen = true;
+      videoFrame.referrerPolicy = 'strict-origin-when-cross-origin';   // YouTube refuses embeds without a referrer
+      panel.appendChild(videoFrame);
+    }
+    const src = `https://www.youtube.com/embed/${attr.id}?loop=1&playlist=${attr.id}&rel=0&playsinline=1`
+      + (attr.start ? `&start=${attr.start}` : '');
+    if (videoFrame.src !== src) videoFrame.src = src;   // only when it changes: re-layout mustn't reload the player
+    const areaW = boxW - 2 * padX, w = Math.min(areaW, areaH * 16 / 9);
+    Object.assign(videoFrame.style, { left: padX + (areaW - w) / 2 + 'px', top: top + 'px', width: w + 'px', height: w * 9 / 16 + 'px' });
+  }
+
 
   const css = c => `rgb(${c.join(',')})`;
 
@@ -229,10 +295,13 @@
     ctx.font = `${fontPx}px ${FONT_STACK}`;
     ctx.textBaseline = 'alphabetic';
     const ulOff = 0.2 * cap, ulH = Math.max(1 / dpr, 0.08 * cap);
+    let bold = false;                                     // <high> text: Courier Prime Bold (same advance widths)
     const freaks = new Map();                             // one state per <freakout>: it shakes as a whole
     let animating = false;
     for (const [ch, x, y, w, attr] of glyphs) {
-      ctx.fillStyle = css(attr && attr.kind === 'broken' ? CFG.brokenLinkColor : CFG.textColor);
+      ctx.fillStyle = css(attr && attr.kind === 'broken' ? CFG.brokenLinkColor : attr && attr.gray ? CFG.grayTextColor
+        : attr && attr.high ? CFG.highTextColor : CFG.textColor);
+      if (Boolean(attr && attr.high) !== bold) { bold = !bold; ctx.font = `${bold ? 'bold ' : ''}${fontPx}px ${FONT_STACK}`; }
       if (attr && attr.kind === 'freak') {
         let f = freaks.get(attr);
         if (!f) { f = freakState(attr, now); freaks.set(attr, f); animating ||= f.animating; }
@@ -513,15 +582,30 @@
     return text.replace(/<gosub ref="([^"]*)"\s*\/?>/g, (_, label) => {
       const i = taggedIndex(label);
       if (i < 0 || chain.includes(label) || chain.length >= 16) return '';
-      return expandGosubs(readProgram(PROGRAMS[i]).body, [...chain, label]);
+      return expandGosubs(readProgram(expandConditionals(PROGRAMS[i])).body, [...chain, label]);
     });
+  }
+
+  // <have-cookie>yes<else>no</have-cookie>, <in-startup>yes<else>no</in-startup>: resolved when a
+  // program starts, before anything else reads it. The branch for the condition's state replaces
+  // the block verbatim, so it may hold any commands, even the closing <stop/> or <goto>. Nests,
+  // either kind in the other (innermost first); a block without exactly one <else> expands to nothing.
+  const CONDITIONAL = /<(have-cookie|in-startup)\s*>((?:(?!<\/?(?:have-cookie|in-startup)\b)[\s\S])*?)<\/\1\s*>/;
+  function expandConditionals(text) {
+    const state = { 'have-cookie': hasCookie(), 'in-startup': inStartup };   // one snapshot per program start
+    for (let m; (m = CONDITIONAL.exec(text));) {
+      const parts = m[2].split(/<else\s*\/?>/);
+      if (parts.length !== 2) console.warn(`console: <${m[1]}> needs exactly one <else>`);
+      text = text.slice(0, m.index) + (parts.length === 2 ? parts[state[m[1]] ? 0 : 1] : '') + text.slice(m.index + m[0].length);
+    }
+    return text;
   }
 
   // → [{ cls: true }, { text: '…', link?, back? }, { delay: ms }, { erase: n }, …]
   // A linked page (back = true) gets a typed "< BACK" line after every clear.
   function parse(text, back = false) {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -530,6 +614,24 @@
       else if (m[0] === '<cls>') ops.push({ cls: true });
       else if (m[0] === '<delete-cookie/>') ops.push({ deleteCookie: true });
       else if (/^<(start|stop)-rain\s*\/?>$/.test(m[0])) ops.push({ rain: m[0].startsWith('<start') });
+      else if (/^<center\s*>$/.test(m[0])) {
+        // Centre on what ends up displayed up to </center>: its text ops, less <replace>'s erased
+        // old text (tags inside it run as usual).
+        const end = text.indexOf('</center>', re.lastIndex);
+        const inner = parse(text.slice(re.lastIndex, end < 0 ? text.length : end));
+        ops.push({ center: inner.filter(op => op.text !== undefined && !op.replaceOld).map(op => op.text).join('') });
+      }
+      else if (/^<video-embed\b/.test(m[0])) {
+        // <video-embed ref=ID t=SEC/>: either order, quotes optional; t (whole seconds, optional
+        // trailing "s") is the start offset. A missing or malformed ref drops the tag.
+        const ref = /\bref\s*=\s*(?:"([^"]*)"|([^\s"\/>]+))/.exec(m[0]), t = /\bt\s*=\s*"?(\d+)s?"?(?=[\s\/>])/.exec(m[0]);
+        const id = ref && (ref[1] ?? ref[2]);
+        if (id && /^[A-Za-z0-9_-]+$/.test(id)) ops.push({ video: id, start: t ? Number(t[1]) : 0 });
+      }
+      else if (/^<(gold|green)-rain\s*\/?>$/.test(m[0])) ops.push({ rainColor: m[0].startsWith('<gold') ? 'gold' : 'green' });
+      else if (/^<(slow|normal)-spew\s*\/?>$/.test(m[0])) ops.push({ slow: m[0].startsWith('<slow') });
+      else if (/^<\/?gray-text\s*>$/.test(m[0])) ops.push({ gray: !m[0].startsWith('</') });
+      else if (/^<\/?high\s*>$/.test(m[0])) ops.push({ high: !m[0].startsWith('</') });
       else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: /one-way/.test(m[7]), noStack: /no-stack/.test(m[7]) });
       else if (m[3] !== undefined) {
         // <replace>: old and new are plain text (tags stripped), so the backspace count is exact.
@@ -545,8 +647,10 @@
         const at = { hold: 0, fade: 0 };
         for (const [, k, ms] of m[12].matchAll(/\b(hold|fade)\s*=\s*"?(\d+)ms"?/g)) at[k] = Number(ms);
         ops.push({ text: m[13], freak: { hold: at.hold, fade: at.fade } });
+      } else if (m[0].startsWith('<top-row')) {
+        ops.push({ row: Math.max(0, Number(m[14] || 0)) });   // delta: 0 or positive
       } else if (m[0].startsWith('<bottom-row')) {
-        ops.push({ bottomRow: Math.min(0, Number(m[11] || 0)) });   // delta: 0 or negative
+        ops.push({ bottomRow: Math.min(1, Number(m[11] || 0)) });   // delta: ≤ 0, or 1 to park the cursor
       } else if (m[9] !== undefined) {
         // <a href="…" download? target?>text</a>: a web link; without an href it's plain text.
         const at = {};
@@ -571,6 +675,7 @@
 
   // stop() and run() bump `gen`; a program from an older generation bails out at its next wait.
   let gen = 0, running = false, next = 0;
+  let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing/>
   let noDisplayDelay = false;   // one-shot: next program skips delays and <replace> (BACK sets it)
   let navStack = [];            // pages to go back to (program indices); empty = on the startup sequence
   let pageIndex = -1;           // the program on screen
@@ -601,18 +706,34 @@
   async function runProgram(i, g, back = false) {
     pageIndex = i;
     const skip = noDisplayDelay;   // no pauses, no typing gaps, no <replace> effect: the text appears at once
-    const prog = readProgram(PROGRAMS[i]);
+    const prog = readProgram(expandConditionals(PROGRAMS[i]));
     const waitsAtStart = waitCount;
+    let charMs = CFG.charMs;       // <slow-spew>/<normal-spew> switch it; every program starts normal
+    let gray = false, high = false;   // inside <gray-text>, <high>
     for (const op of parse(stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [])), back)) {
       if (skip && (op.delay !== undefined || op.erase !== undefined || op.replaceOld)) continue;
       if (op.cls) {
         clearScreen();
       } else if (op.bottomRow !== undefined) {
         typeChar(ROW_MARK, { kind: 'row', delta: op.bottomRow });   // a directive, not typed: no wait
+      } else if (op.center !== undefined) {
+        typeChar(CENTER_MARK, { kind: 'center', text: op.center });   // a directive: no wait
+      } else if (op.video !== undefined) {
+        typeChar(VIDEO_MARK, { kind: 'video', id: op.video, start: op.start });   // a directive: no wait
+      } else if (op.row !== undefined) {
+        typeChar(ROW_MARK, { kind: 'row', row: op.row });
       } else if (op.rain !== undefined) {
         if (window.MatrixRain) op.rain ? window.MatrixRain.startRain() : window.MatrixRain.stopRain();
+      } else if (op.rainColor) {
+        if (window.MatrixRain) window.MatrixRain.setRainColor(op.rainColor);
       } else if (op.deleteCookie) {
         deleteCookie();
+      } else if (op.slow !== undefined) {
+        charMs = op.slow ? CFG.slowCharMs : CFG.charMs;
+      } else if (op.gray !== undefined) {
+        gray = op.gray;
+      } else if (op.high !== undefined) {
+        high = op.high;
       } else if (op.delay !== undefined) {
         await wait(op.delay, g);
       } else if (op.erase !== undefined) {
@@ -626,10 +747,16 @@
         setTyping(false);
       } else {
         // One link object per occurrence, shared by its characters (hover highlights just this one).
-        const attr = op.back ? { kind: 'back' }
+        let attr = op.back ? { kind: 'back' }
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
+        if (gray && !op.back) {                           // < BACK after a <cls> stays green
+          if (attr) attr.gray = true; else attr = GRAY;
+        }
+        if (high && !op.back) {
+          if (attr) attr.high = true; else attr = HIGH;
+        }
         if (skip) {
           for (const ch of op.text) typeChar(ch, attr);
           if (op.freak) attr.t0 = -Infinity;              // the final state: full freakout, faded away
@@ -640,7 +767,7 @@
         // and that lateness would add up. Sleep only when ahead; when behind, type straight away.
         let due = performance.now();
         for (const ch of op.text) {
-          due += CFG.charMs * (1 + CFG.jitter * (2 * Math.random() - 1));
+          due += charMs * (1 + CFG.jitter * (2 * Math.random() - 1));
           const now = performance.now();
           if (now - due > CATCH_UP_MS) due = now;         // after a stall (hidden tab), resume rather than burst
           if (due > now) await wait(due - now, g);
@@ -654,6 +781,7 @@
     if (skip) noDisplayDelay = false;                     // one-shot: only once the program is done
     if (prog.makeCookie) makeCookie();                    // <stop make-cookie/>: only on a completed run
     if (prog.goto !== undefined) return scheduleGoto(prog.goto, g, waitCount === waitsAtStart);
+    if (prog.stop) return 'stop';
   }
 
   // <goto ref="label"> at the end of a completed program: jump like a one-way link (stack cleared,
@@ -686,10 +814,12 @@
   // console stays as the last program left it.
   async function loop(g) {
     try {
+      let r;
       for (let i; (i = nextProgram()) >= 0;) {
-        const r = await runProgram(i, g);
-        if (r === 'goto' || r === 'stop' || readProgram(PROGRAMS[i]).stop) break;
+        r = await runProgram(i, g);
+        if (r === 'goto' || r === 'stop') break;          // 'stop': a broken goto, or the program's <stop/>
       }
+      if (r !== 'goto') inStartup = false;                // the startup sequence is over (<goto> carries it on)
       if (g === gen) running = false;                     // a goto may already have started a newer loop
     } catch (e) {
       if (e !== ABORT) throw e;
@@ -728,12 +858,11 @@
 
   // A one-way link has no < BACK: it clears the stack and makes the program the base page, as run() does.
   // A no-stack link replaces the current page instead of stacking on it, so BACK skips that page;
-  // the base page can't be replaced, so from there it's a no-op.
+  // replacing the base page makes the target the new base page, which is just a one-way link.
   function navigate(label, { oneWay = false, noStack = false } = {}) {
     const i = taggedIndex(label);
     if (i < 0) return;                                    // broken link: no-op
-    if (oneWay) { run(i); return; }
-    if (noStack && !navStack.length) return;
+    if (oneWay || (noStack && !navStack.length)) { run(i); return; }
     if (!noStack) navStack.push(pageIndex);
     showPage(i);
   }
@@ -813,11 +942,13 @@
 
   window.addEventListener('resize', scheduleResize);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleResize);
-  document.fonts.load("16px 'Courier Prime'").then(refresh);   // canvas text needs the face loaded
+  // Canvas text needs the faces loaded (bold: <high>).
+  Promise.all([document.fonts.load("16px 'Courier Prime'"), document.fonts.load("bold 16px 'Courier Prime'")]).then(refresh);
 
   window.MatrixConsole = {
     start, stop, run, refresh, navigate, back, makeCookie, hasCookie, deleteCookie, programs: PROGRAMS, CFG,
     get navDepth() { return navStack.length; },
+    get inStartup() { return inStartup; },
     get noDisplayDelay() { return noDisplayDelay; },
     set noDisplayDelay(on) { noDisplayDelay = Boolean(on); },
   };
@@ -830,6 +961,6 @@
   // program's <start-rain>.)
   const landings = PROGRAMS.filter(p => readProgram(p).landing);
   if (landings.length !== 1) deleteCookie();
-  if (hasCookie()) next = PROGRAMS.indexOf(landings[0]);
+  if (hasCookie()) { next = PROGRAMS.indexOf(landings[0]); inStartup = false; }
   start();
 })();
