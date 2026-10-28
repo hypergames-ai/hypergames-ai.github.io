@@ -19,7 +19,7 @@
     textColor: [68, 232, 127],
     cursorColor: [99, 237, 139],
     brokenLinkColor: [128, 128, 128],   // <prog> links whose tag doesn't exist
-    grayTextColor: [128, 128, 128],     // <gray-text>: de-emphasised text
+    grayTextColor: [128, 128, 128],     // <grey>: de-emphasised text
     highTextColor: [150, 255, 180],     // <high>: emphasised text (drawn bold, too)
     glow: false,                // bloom off for now (it showed a grid pattern on real GPUs)
     glowColor: [55, 127, 107],  // phosphor bloom is greener than the near-white cores it surrounds
@@ -74,9 +74,9 @@
   // drops that start from then on (green at launch); drops already falling keep theirs.
   // Typing speed: <slow-spew> types at slowCharMs from there on, <normal-spew> back at charMs.
   // Every program starts at normal speed.
-  // <gray-text>text</gray-text>: text (links and other tags inside included) in grey rather than
+  // <grey>text</grey>: text (links and other tags inside included) in grey rather than
   // green, to de-emphasise it. Every program starts green.
-  // <high>text</high>: the opposite: lighter green and bold (not to be combined with <gray-text>).
+  // <high>text</high>: the opposite: lighter green and bold (not to be combined with <grey>).
   // <freakout hold="1500ms" fade="3000ms">text</freakout>: text that, once typed, holds still for
   // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
   // <goto ref="label"> as the very last characters (instead of <stop/>) jumps to that program when
@@ -187,7 +187,7 @@
 
   const LINK_KINDS = new Set(['prog', 'broken', 'back', 'url']);
   const isLink = attr => Boolean(attr && LINK_KINDS.has(attr.kind));
-  const GRAY = { gray: true };   // the attr of plain text inside <gray-text>
+  const GRAY = { gray: true };   // the attr of plain text inside <grey>
   const HIGH = { high: true };   // and inside <high>
 
   function layout() {
@@ -638,7 +638,7 @@
       }
       else if (/^<(gold|green)-rain\s*\/?>$/.test(m[0])) ops.push({ rainColor: m[0].startsWith('<gold') ? 'gold' : 'green' });
       else if (/^<(slow|normal)-spew\s*\/?>$/.test(m[0])) ops.push({ slow: m[0].startsWith('<slow') });
-      else if (/^<\/?gray-text\s*>$/.test(m[0])) ops.push({ gray: !m[0].startsWith('</') });
+      else if (/^<\/?grey\s*>$/.test(m[0])) ops.push({ gray: !m[0].startsWith('</') });
       else if (/^<\/?high\s*>$/.test(m[0])) ops.push({ high: !m[0].startsWith('</') });
       else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: /one-way/.test(m[7]), noStack: /no-stack/.test(m[7]) });
       else if (m[3] !== undefined) {
@@ -717,7 +717,7 @@
     const prog = readProgram(expandConditionals(PROGRAMS[i]));
     const waitsAtStart = waitCount;
     let charMs = CFG.charMs;       // <slow-spew>/<normal-spew> switch it; every program starts normal
-    let gray = false, high = false;   // inside <gray-text>, <high>
+    let gray = false, high = false;   // inside <grey>, <high>
     for (const op of parse(stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [])), back)) {
       if (skip && (op.delay !== undefined || op.erase !== undefined || op.replaceOld)) continue;
       if (op.cls) {
