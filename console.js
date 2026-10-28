@@ -51,23 +51,23 @@
   // BACK: the linked program becomes the base page and the nav stack starts over from it.
   // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
   // stacking on it, so BACK skips it; on the base page it acts as one-way (no BACK).
-  // Returning visitors: <stop make-cookie/> sets a presence flag (the "cookie") when its program
-  // finishes; <delete-cookie/> clears it. At launch, if exactly one program starts with <landing/>
+  // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
+  // finishes; <delete-cookie> clears it. At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
-  // first; otherwise the flag is cleared and program 0 runs. Unrecognised tags render as nothing. <stop/> as the very last
+  // first; otherwise the flag is cleared and program 0 runs. Unrecognised tags render as nothing. <stop> as the very last
   // characters ends the startup sequence after that program.
   // <have-cookie>yes<else>no</have-cookie>: when the program starts, the branch for the flag's
   // state replaces the block verbatim and is then run as usual (<else> required; either branch may
-  // be empty; blocks nest; a branch may hold the closing <stop/> or <goto>). Keep <landing/> and
+  // be empty; blocks nest; a branch may hold the closing <stop> or <goto>). Keep <landing> and
   // <tag> outside it.
   // <in-startup>yes<else>no</in-startup>: the same, on whether the startup sequence is still on
-  // (true from launch until a program ends the sequence with <stop/> or the programs run out; a
-  // <goto> carries it on; false from the start when launch goes straight to the <landing/> program).
-  // Templates: <gosub ref="label"/> pastes that tagged program in place; its commands run inline.
-  // <bottom-row/> moves the write head (and cursor) to the left edge of the last visible row;
-  // <bottom-row delta=-1/> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row delta=1/>
+  // (true from launch until a program ends the sequence with <stop> or the programs run out; a
+  // <goto> carries it on; false from the start when launch goes straight to the <landing> program).
+  // Templates: <gosub ref="label"> pastes that tagged program in place; its commands run inline.
+  // <bottom-row> moves the write head (and cursor) to the left edge of the last visible row;
+  // <bottom-row delta=-1> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row delta=1>
   // parks the cursor one row below the bottom row, out of the way (nothing should be typed after it).
-  // <top-row/> moves it to the left edge of the top row; <top-row delta=2/> to 2 rows below it
+  // <top-row> moves it to the left edge of the top row; <top-row delta=2> to 2 rows below it
   // (delta ≥ 0; the caller keeps it within the panel).
   // Rain: <start-rain> starts it (no-op if raining), <stop-rain> lets falling drops finish and
   // forms no more. The rain doesn't start by itself. <gold-rain>/<green-rain> set the colour of
@@ -79,9 +79,9 @@
   // <high>text</high>: the opposite: lighter green and bold (not to be combined with <grey>).
   // <freakout hold="1500ms" fade="3000ms">text</freakout>: text that, once typed, holds still for
   // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
-  // <goto ref="label"> as the very last characters (instead of <stop/>) jumps to that program when
+  // <goto ref="label"> as the very last characters (instead of <stop>) jumps to that program when
   // this one finishes, like a one-way link.
-  // <video-embed ref=YOUTUBE_ID t=SEC/> (t optional: start offset in seconds): a 16:9 YouTube player (click to play, loops) in the text area from
+  // <video-embed ref=YOUTUBE_ID t=SEC> (t optional: start offset in seconds): a 16:9 YouTube player (click to play, loops) in the text area from
   // the current row down to just above the bottom row; text after it goes on the bottom row.
   // Removed by the next clear.
   // <center>text</center>: text centred horizontally on its line (it must fit on one line;
@@ -95,18 +95,18 @@
     "ALERT - PERIMETER BREACH\n========================\nMODAL ERROR: IR.AA.W1M: ON DEVICE D: AN ILLEGAL MEMORY ACCESS\nERROR: MISSING FILE 'MORPH.BLD.EXE'/'HEART O' THE CITY'\nCODE: 009952310\nCONTENT: モーフィアスはここを去った\n<delay>4000ms</delay><cls>",
     'Program restart initiated: closing modal...<stop-rain><delay>600ms</delay>.<delay>700ms</delay>.<delay>600ms</delay>.<delay>600ms</delay>....<delay>800ms</delay>RESTARTING PROGRAM<delay>2000ms</delay><cls><delay>1000ms</delay>',
     '<tag>welcome</tag>Welcome to <replace hold="2000ms">The Desert of the Real!<with hold="1000ms">The Oasis of the Hyperreal!</replace><start-rain><delay>3000ms</delay><in-startup><goto ref="i1"><else></in-startup>',
-    //\n<gosub ref="footer"/>', <delay>30000ms</delay><stop make-cookie/>
+    //\n<gosub ref="footer">', <delay>30000ms</delay><stop make-cookie>
     
     // Intro to cybernetic humans...
-    '<tag>i1</tag><slow-spew>Billions of people<delay>250ms</delay> just<delay>200ms</delay> living out their lives... <delay>400ms</delay><normal-spew>oblivious<slow-spew><delay>800ms</delay>\n\nOblivious<delay>333ms</delay> to the fact they are increasingly becoming <high>cybernetic</high><delay>1000ms</delay>\n\nWhen video games arrived, cyberspace was behind the screen, inaccessible, a fourth wall.\nCyberspace was THERE<delay>1000ms</delay>\n\nAnd when smartphones arrived, we could now tunnel through the fourth wall into cyberspace.\nWE could now go THERE, together<delay>1000ms</delay>\n\nWith 3D AR headgear, the fourth wall is finally gone.\nTHERE can now come HERE...<delay>2000ms</delay><normal-spew><prog ref="i2" no-stack>CONTINUE</prog><stop/>',
-    '<tag>i2</tag>Second page<normal-spew><prog ref="i2">CONTINUE</prog> ><gosub ref="footer"/><stop/>',
-    '<tag>q2</tag><video-embed ref=YJg02ivYzSs t=222/><center>With 2D AR Glasses=accessories, 3D=prosthetics.<bottom-row delta=1/></center><stop/>',
+    '<tag>i1</tag><slow-spew>Billions of people<delay>250ms</delay> just<delay>200ms</delay> living out their lives... <delay>400ms</delay><normal-spew>oblivious<slow-spew><delay>800ms</delay>\n\nOblivious<delay>333ms</delay> to the fact they are increasingly becoming <high>cybernetic</high><delay>1000ms</delay>\n\nWhen video games arrived, cyberspace was behind the screen, inaccessible, a fourth wall.\nCyberspace was THERE<delay>1000ms</delay>\n\nAnd when smartphones arrived, we could now tunnel through the fourth wall into cyberspace.\nWE could now go THERE, together<delay>1000ms</delay>\n\nWith 3D AR headgear, the fourth wall is finally gone.\nTHERE can now come HERE...<delay>2000ms</delay><normal-spew><prog ref="i2" no-stack>CONTINUE</prog><stop>',
+    '<tag>i2</tag>Second page<normal-spew><prog ref="i2">CONTINUE</prog> ><gosub ref="footer"><stop>',
+    '<tag>q2</tag><video-embed ref=YJg02ivYzSs t=222><center>With 2D AR Glasses=accessories, 3D=prosthetics.<bottom-row delta=1></center><stop>',
     
 
-    '<tag>footer</tag><bottom-row delta=-1/><a href="RedPillWhitepaper.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n',
-    '<tag>q1</tag><freakout hold=1000ms fade=3000ms>This is an informational page.</freakout>\n<delay>1000ms</delay>The Matrix has you<stop/>',
+    '<tag>footer</tag><bottom-row delta=-1><a href="RedPillWhitepaper.pdf" download>Download the whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog>\n',
+    '<tag>q1</tag><freakout hold=1000ms fade=3000ms>This is an informational page.</freakout>\n<delay>1000ms</delay>The Matrix has you<stop>',
     '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth."<delay>800ms</delay> (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
-    '<landing/><start-rain><goto ref="i1">',
+    '<landing><start-rain><goto ref="i1">',
   ];
 
   const FONT_STACK = "'Courier Prime', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', 'Noto Sans JP', monospace";
@@ -196,7 +196,7 @@
     const bottomRow = Math.max(0, Math.floor(maxH / lineH) - 1);   // last row that fits entirely
     const placed = [];
     let x = 0, line = 0, k = 0, video = null, videoTop = 0;
-    let parked = false;            // after <bottom-row delta=1/>, before any more text: the cursor's out of sight
+    let parked = false;            // after <bottom-row delta=1>, before any more text: the cursor's out of sight
     for (const ch of screenText) {                       // by code point, so CJK stays whole
       const attr = attrs[k++];
       if (ch === '\n') { x = 0; line++; parked = false; continue; }
@@ -228,7 +228,7 @@
     linkRects = glyphs.filter(g => isLink(g[4])).map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
   }
-  // <video-embed ref=id/>: one 16:9 YouTube player in the text area between the row where the tag
+  // <video-embed ref=id>: one 16:9 YouTube player in the text area between the row where the tag
   // ran and the bottom row (kept free for a label and links): as large as fits, horizontally
   // centred, top-aligned. Click to play; loops. It goes with
   // the screen: the next clear (any navigation, <cls>) leaves no marker, so it's removed.
@@ -555,16 +555,17 @@
       .replace(/HH:MM/g, `${pad(now.getHours())}:${pad(now.getMinutes())}`);
   }
 
-  // Program-level markers, not displayed: <landing/> (only as the very first characters), then
-  // <tag>label</tag>; and as the very last characters <stop/>, <stop make-cookie/> or
+  // Program-level markers, not displayed: <landing> (only as the very first characters), then
+  // <tag>label</tag>; and as the very last characters <stop>, <stop make-cookie> or
   // <goto ref="label">.
   function readProgram(src) {
     let body = src, label = null, stop = false, makeCookie = false, goto;
-    const landing = body.startsWith('<landing/>');
-    if (landing) body = body.slice('<landing/>'.length);
+    const lm = /^<landing\s*\/?>/.exec(body);
+    const landing = Boolean(lm);
+    if (landing) body = body.slice(lm[0].length);
     const t = /^<tag>([a-z0-9_]+)<\/tag>/.exec(body);
     if (t) { label = t[1]; body = body.slice(t[0].length); }
-    const end = /(?:<stop(\s+make-cookie)?\/>|<goto ref="([^"]*)"\s*\/?>)$/.exec(body);
+    const end = /(?:<stop(\s+make-cookie)?\s*\/?>|<goto ref="([^"]*)"\s*\/?>)$/.exec(body);
     if (end) {
       if (end[2] !== undefined) goto = end[2];
       else { stop = true; makeCookie = Boolean(end[1]); }
@@ -583,8 +584,8 @@
     return PROGRAMS.findIndex(p => readProgram(p).label === label);
   }
 
-  // <gosub ref="label"/>: paste the tagged program's body (its <landing/>, <tag> and trailing
-  // <stop …/> stripped) into the caller's text, so its commands run inline. Recursive; a label
+  // <gosub ref="label">: paste the tagged program's body (its <landing>, <tag> and trailing
+  // <stop …> stripped) into the caller's text, so its commands run inline. Recursive; a label
   // already being expanded (a cycle) or a missing ref expands to nothing.
   function expandGosubs(text, chain = []) {
     return text.replace(/<gosub ref="([^"]*)"\s*\/?>/g, (_, label) => {
@@ -596,7 +597,7 @@
 
   // <have-cookie>yes<else>no</have-cookie>, <in-startup>yes<else>no</in-startup>: resolved when a
   // program starts, before anything else reads it. The branch for the condition's state replaces
-  // the block verbatim, so it may hold any commands, even the closing <stop/> or <goto>. Nests,
+  // the block verbatim, so it may hold any commands, even the closing <stop> or <goto>. Nests,
   // either kind in the other (innermost first); a block without exactly one <else> expands to nothing.
   const CONDITIONAL = /<(have-cookie|in-startup)\s*>((?:(?!<\/?(?:have-cookie|in-startup)\b)[\s\S])*?)<\/\1\s*>/;
   function expandConditionals(text) {
@@ -620,7 +621,7 @@
       if (m.index > last) ops.push({ text: text.slice(last, m.index) });
       if (m[1] !== undefined) ops.push({ delay: Number(m[1]) });
       else if (m[0] === '<cls>') ops.push({ cls: true });
-      else if (m[0] === '<delete-cookie/>') ops.push({ deleteCookie: true });
+      else if (/^<delete-cookie\s*\/?>$/.test(m[0])) ops.push({ deleteCookie: true });
       else if (/^<(start|stop)-rain\s*\/?>$/.test(m[0])) ops.push({ rain: m[0].startsWith('<start') });
       else if (/^<center\s*>$/.test(m[0])) {
         // Centre on what ends up displayed up to </center>: its text ops, less <replace>'s erased
@@ -630,7 +631,7 @@
         ops.push({ center: inner.filter(op => op.text !== undefined && !op.replaceOld).map(op => op.text).join('') });
       }
       else if (/^<video-embed\b/.test(m[0])) {
-        // <video-embed ref=ID t=SEC/>: either order, quotes optional; t (whole seconds, optional
+        // <video-embed ref=ID t=SEC>: either order, quotes optional; t (whole seconds, optional
         // trailing "s") is the start offset. A missing or malformed ref drops the tag.
         const ref = /\bref\s*=\s*(?:"([^"]*)"|([^\s"\/>]+))/.exec(m[0]), t = /\bt\s*=\s*"?(\d+)s?"?(?=[\s\/>])/.exec(m[0]);
         const id = ref && (ref[1] ?? ref[2]);
@@ -683,7 +684,7 @@
 
   // stop() and run() bump `gen`; a program from an older generation bails out at its next wait.
   let gen = 0, running = false, next = 0;
-  let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing/>
+  let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing>
   let noDisplayDelay = false;   // one-shot: next program skips delays and <replace> (BACK sets it)
   let navStack = [];            // pages to go back to (program indices); empty = on the startup sequence
   let pageIndex = -1;           // the program on screen
@@ -787,14 +788,14 @@
       }
     }
     if (skip) noDisplayDelay = false;                     // one-shot: only once the program is done
-    if (prog.makeCookie) makeCookie();                    // <stop make-cookie/>: only on a completed run
+    if (prog.makeCookie) makeCookie();                    // <stop make-cookie>: only on a completed run
     if (prog.goto !== undefined) return scheduleGoto(prog.goto, g, waitCount === waitsAtStart);
     if (prog.stop) return 'stop';
   }
 
   // <goto ref="label"> at the end of a completed program: jump like a one-way link (stack cleared,
   // the target becomes the base page). Deferred so the finishing loop exits first, and dropped if
-  // anything else started meanwhile. A broken ref stops like <stop/>. A cycle of programs that
+  // anything else started meanwhile. A broken ref stops like <stop>. A cycle of programs that
   // finish without waiting at all is cut off after GOTO_SPIN_LIMIT jumps.
   const GOTO_SPIN_LIMIT = 32;
   let gotoSpins = 0;
@@ -818,14 +819,14 @@
     return next < PROGRAMS.length ? next++ : -1;
   }
 
-  // Runs the remaining programs once, stopping early after a program that ends with <stop/>; the
+  // Runs the remaining programs once, stopping early after a program that ends with <stop>; the
   // console stays as the last program left it.
   async function loop(g) {
     try {
       let r;
       for (let i; (i = nextProgram()) >= 0;) {
         r = await runProgram(i, g);
-        if (r === 'goto' || r === 'stop') break;          // 'stop': a broken goto, or the program's <stop/>
+        if (r === 'goto' || r === 'stop') break;          // 'stop': a broken goto, or the program's <stop>
       }
       if (r !== 'goto') inStartup = false;                // the startup sequence is over (<goto> carries it on)
       if (g === gen) running = false;                     // a goto may already have started a newer loop
@@ -876,7 +877,7 @@
   }
 
   // Re-render the previous page instantly. Back on the startup sequence's page, the sequence then
-  // carries on after it, unless that program ends with <stop/>.
+  // carries on after it, unless that program ends with <stop>.
   function back() {
     if (!navStack.length) return;
     const i = navStack.pop();
@@ -964,7 +965,7 @@
   resize();
   requestAnimationFrame(frame);
 
-  // Launch: a returning visitor (flag set, exactly one <landing/> program) starts on the landing
+  // Launch: a returning visitor (flag set, exactly one <landing> program) starts on the landing
   // program. Otherwise the flag is cleared and the sequence starts at 0. (Rain starts only from a
   // program's <start-rain>.)
   const landings = PROGRAMS.filter(p => readProgram(p).landing);

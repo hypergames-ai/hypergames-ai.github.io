@@ -84,21 +84,21 @@ its text one character at a time (`CFG.charMs`, default 16 ms, ±50% jitter). Pr
 | `<prog ref="label">text</prog>` | A clickable, underlined link to the program tagged *label* (no tags inside *text*). Grey, still underlined, and inert if no program has that tag |
 | `<prog ref="label" one-way>text</prog>` | Same, but the linked program shows without `< BACK` and becomes the base page: the nav stack starts over from it |
 | `<prog ref="label" no-stack>text</prog>` | On a page with `< BACK`: the linked program replaces the current page instead of stacking on it, so its `< BACK` goes where the current page's would have. Chain main → a → b → c with no-stack links from a and b, and BACK from any of them returns to main. On the base page (no `< BACK`) it replaces the base page, i.e. acts as `one-way`. With `one-way` too, `one-way` wins |
-| `<stop/>` (very last characters) | The startup sequence stops after this program |
-| `<goto ref="label">` (very last characters, instead of `<stop/>`) | When the program finishes, jumps to the program tagged *label* like a one-way link: nav stack cleared, the target becomes the base page and the sequence carries on from it. Doesn't fire if the program is cut short; a missing tag stops like `<stop/>`; ignored inside `<gosub>` templates |
-| `<stop make-cookie/>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
-| `<landing/>` (very first characters, before any `<tag>`) | Marks the landing program for returning visitors. Not displayed; even a leading space disables it |
-| `<delete-cookie/>` | Clears the returning-visitor flag at that point in the program |
-| `<have-cookie>yes<else>no</have-cookie>` | Branches on the returning-visitor flag. When the program starts, before anything else, the block is replaced by *yes* (flag set) or *no* (not set), exactly as written (spaces included), and that text then runs like any other program text: links, `<delay>`, `<gosub>`, even the program's closing `<stop/>`, `<stop make-cookie/>` or `<goto>`. `<else>` is required (a block without exactly one expands to nothing, with a console warning); either branch may be empty; blocks nest. Evaluated once per run, so a `<delete-cookie/>` earlier in the same program doesn't change it (a BACK re-render evaluates it again). Keep `<landing/>` and `<tag>` outside it. Templates' blocks resolve the same way |
-| `<in-startup>yes<else>no</in-startup>` | Same rules as `<have-cookie>`, branching on whether the startup sequence is still on: true from launch until the sequence ends (a program ending in `<stop/>`/`<stop make-cookie/>` completes, or the programs run out; a `<goto>` or one-way link carries it on, and pages linked from it still count as in it). False from the start when launch goes straight to the `<landing/>` program, and false for good once the sequence has ended. The two kinds nest inside each other |
+| `<stop>` (very last characters) | The startup sequence stops after this program |
+| `<goto ref="label">` (very last characters, instead of `<stop>`) | When the program finishes, jumps to the program tagged *label* like a one-way link: nav stack cleared, the target becomes the base page and the sequence carries on from it. Doesn't fire if the program is cut short; a missing tag stops like `<stop>`; ignored inside `<gosub>` templates |
+| `<stop make-cookie>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
+| `<landing>` (very first characters, before any `<tag>`) | Marks the landing program for returning visitors. Not displayed; even a leading space disables it |
+| `<delete-cookie>` | Clears the returning-visitor flag at that point in the program |
+| `<have-cookie>yes<else>no</have-cookie>` | Branches on the returning-visitor flag. When the program starts, before anything else, the block is replaced by *yes* (flag set) or *no* (not set), exactly as written (spaces included), and that text then runs like any other program text: links, `<delay>`, `<gosub>`, even the program's closing `<stop>`, `<stop make-cookie>` or `<goto>`. `<else>` is required (a block without exactly one expands to nothing, with a console warning); either branch may be empty; blocks nest. Evaluated once per run, so a `<delete-cookie>` earlier in the same program doesn't change it (a BACK re-render evaluates it again). Keep `<landing>` and `<tag>` outside it. Templates' blocks resolve the same way |
+| `<in-startup>yes<else>no</in-startup>` | Same rules as `<have-cookie>`, branching on whether the startup sequence is still on: true from launch until the sequence ends (a program ending in `<stop>`/`<stop make-cookie>` completes, or the programs run out; a `<goto>` or one-way link carries it on, and pages linked from it still count as in it). False from the start when launch goes straight to the `<landing>` program, and false for good once the sequence has ended. The two kinds nest inside each other |
 | `<a href="files/report.pdf">text</a>` | A web link, underlined. Relative hrefs (no leading `/`) resolve against the page, so they work on localhost, GitHub Pages and `file://`; absolute `https://…` hrefs work too. Opens in the same tab (Ctrl/Cmd- or middle-click: new tab) |
 | `<a href="…" download>` / `download="name.pdf"` | Download instead of navigate, optionally saving as *name*. Browsers honour this only for same-origin (relative) links; on an absolute link to another site it just opens |
 | `<a href="…" target="_blank">` | Always open in a new tab |
-| `<gosub ref="label"/>` | Pastes the program tagged *label* in place, as if written there: its text types and its commands (`<delay>`, `<cls>`, links, `<delete-cookie/>`, …) run inline. Its own `<tag>`/`<landing/>`/`<stop …/>` are ignored. Templates can include templates; cycles and missing refs paste nothing |
-| `<bottom-row/>`, `<bottom-row delta=-1/>` | Moves the write head and cursor to the left edge of the panel's last visible row, or `delta` rows above it (`delta` ≤ 0). Nothing is erased; text written there draws over whatever is on that row. Re-anchors when the window resizes. `<bottom-row delta=1/>` parks the cursor one row below the bottom row, out of the way (e.g. as the last thing on a video page); it's a parking spot only, so don't type anything after it (the screen doesn't scroll for it) |
-| `<top-row/>`, `<top-row delta=2/>` | Moves the write head and cursor to the left edge of the panel's top row, or `delta` rows below it (`delta` ≥ 0). Like `<bottom-row>`, nothing is erased. The program is responsible for a row that fits the panel |
+| `<gosub ref="label">` | Pastes the program tagged *label* in place, as if written there: its text types and its commands (`<delay>`, `<cls>`, links, `<delete-cookie>`, …) run inline. Its own `<tag>`/`<landing>`/`<stop …>` are ignored. Templates can include templates; cycles and missing refs paste nothing |
+| `<bottom-row>`, `<bottom-row delta=-1>` | Moves the write head and cursor to the left edge of the panel's last visible row, or `delta` rows above it (`delta` ≤ 0). Nothing is erased; text written there draws over whatever is on that row. Re-anchors when the window resizes. `<bottom-row delta=1>` parks the cursor one row below the bottom row, out of the way (e.g. as the last thing on a video page); it's a parking spot only, so don't type anything after it (the screen doesn't scroll for it) |
+| `<top-row>`, `<top-row delta=2>` | Moves the write head and cursor to the left edge of the panel's top row, or `delta` rows below it (`delta` ≥ 0). Like `<bottom-row>`, nothing is erased. The program is responsible for a row that fits the panel |
 | `<center>text</center>` | Centres *text* horizontally on its line: typing starts where the finished line will be centred. Tags inside work as usual (links, `<delay>`, …). The text must fit on one line; it never moves back over text already on that line |
-| `<video-embed ref=YOUTUBE_ID/>`, `<video-embed ref=YOUTUBE_ID t=90/>` | A 16:9 YouTube player (standard embed: click to play; loops; suggestions limited to the same channel; fullscreen allowed; optional `t` = start offset in whole seconds, `90` or `90s`, quotes optional), as large as fits between the write head's row (the next row if the line has text) and the bottom row, which stays free for a label and links: text after the tag goes there; horizontally centred, top-aligned. Put it first to fill the panel; on a page with `< BACK` it starts below that line. The next clear removes it (any navigation, `<cls>`); a second one on the same screen replaces it. YouTube refuses to play it from a `file://` page ("Error 153 … Missing or Blocked Referrer Header"): test with a local server, e.g. `python3 -m http.server 8000`, then open http://localhost:8000 |
+| `<video-embed ref=YOUTUBE_ID>`, `<video-embed ref=YOUTUBE_ID t=90>` | A 16:9 YouTube player (standard embed: click to play; loops; suggestions limited to the same channel; fullscreen allowed; optional `t` = start offset in whole seconds, `90` or `90s`, quotes optional), as large as fits between the write head's row (the next row if the line has text) and the bottom row, which stays free for a label and links: text after the tag goes there; horizontally centred, top-aligned. Put it first to fill the panel; on a page with `< BACK` it starts below that line. The next clear removes it (any navigation, `<cls>`); a second one on the same screen replaces it. YouTube refuses to play it from a `file://` page ("Error 153 … Missing or Blocked Referrer Header"): test with a local server, e.g. `python3 -m http.server 8000`, then open http://localhost:8000 |
 | `<freakout hold="1500ms" fade="3000ms">text</freakout>` | Types *text* normally; once it's all typed it holds still for `hold`, then shakes (a noisy x/y jiggle of the whole string) and blurs, both ramping up exponentially over `fade`; during the last 20% of `fade` it also fades linearly to invisible, and stays gone (the space it took stays empty). Quotes optional, either order, missing = 0 ms. Plain text only inside. An instant render shows the end state (nothing); under `prefers-reduced-motion` it blurs and fades without shaking |
 | `<start-rain>` | Starts the rain: drops begin falling in a staggered wave. No-op if it's already raining. The rain never starts by itself |
 | `<stop-rain>` | Stops the rain: drops already falling finish (and splash), no new ones form |
@@ -123,7 +123,7 @@ at runtime.
 **Pages:** clicking a prog-link opens the tagged program on its own, under a typed, clickable
 `< BACK` (underlined while hovered); links stack. `< BACK` pops the stack and re-renders the previous
 page instantly (with the one-shot flag below). Back on the startup sequence's page, the sequence
-carries on after it unless that program ends with `<stop/>` — so programs placed after a `<stop/>`
+carries on after it unless that program ends with `<stop>` — so programs placed after a `<stop>`
 are reachable only through links.
 
 **One-shot `noDisplayDelay`:** while set, the next program runs with no waits at all — no `<delay>`
@@ -131,19 +131,19 @@ pauses, no typing gaps, and no replace effect (only the `<with>` text; `<freakou
 at once; `<cls>` still clears. It turns itself off once that program finishes. It starts OFF; `< BACK` sets it.
 
 **Video pages:** a video with a hand-made label and prev/next links on the bottom row:
-`'<tag>vid1</tag><video-embed ref=dQw4w9WgXcQ/><prog ref="vid0" no-stack>< PREV</prog> Part 1 <prog ref="vid2" no-stack>NEXT ></prog><stop/>'`.
+`'<tag>vid1</tag><video-embed ref=dQw4w9WgXcQ><prog ref="vid0" no-stack>< PREV</prog> Part 1 <prog ref="vid2" no-stack>NEXT ></prog><stop>'`.
 
-**Footers:** `Content…<bottom-row/>FOOTER TEXT<bottom-row delta=-1/>` puts the footer on the last
+**Footers:** `Content…<bottom-row>FOOTER TEXT<bottom-row delta=-1>` puts the footer on the last
 row and leaves the cursor blinking at the left edge of the row above it.
 
 **Templates:** a template is just a tagged program used via `<gosub>`. Since tagged programs also
-run in the startup sequence, put templates after a `<stop/>` program so they only appear where
+run in the startup sequence, put templates after a `<stop>` program so they only appear where
 they're included.
 
 **Returning visitors:** the "cookie" is a presence-only flag in `localStorage`
 (key `skip_long_intro`), so it also works from `file://`. At launch, if the number of programs starting
-with `<landing/>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0;
-with the flag, the `<landing/>` program runs first (as the base page). Either way the rain appears
+with `<landing>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0;
+with the flag, the `<landing>` program runs first (as the base page). Either way the rain appears
 only when a program runs `<start-rain>` — put one at the top of the landing program to have rain
 straight away for returning visitors. Clearing the site's data resets it.
 
@@ -154,8 +154,8 @@ visitor came in.
 A program can also branch on the flag with `<have-cookie>`:
 
 ```js
-'<tag>hello</tag><have-cookie>Welcome back.<else>First time here?</have-cookie><stop/>',
-'<tag>menu</tag><have-cookie><prog ref="news">What\'s new</prog><stop/><else><prog ref="intro">Start here</prog><stop make-cookie/></have-cookie>',
+'<tag>hello</tag><have-cookie>Welcome back.<else>First time here?</have-cookie><stop>',
+'<tag>menu</tag><have-cookie><prog ref="news">What\'s new</prog><stop><else><prog ref="intro">Start here</prog><stop make-cookie></have-cookie>',
 ```
 
 ## JavaScript API
