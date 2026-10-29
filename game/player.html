@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>hypergames.ai</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;overflow:hidden}
+  /* pan-y: taps go to the game, vertical swipes still scroll the X feed. */
+  canvas{display:block;width:100%;height:100%;touch-action:pan-y;
+         -webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+(() => {
+  const cv = document.getElementById('c'), cx = cv.getContext('2d');
+  let W, H, dpr, circles = [], score = 0, best = 0, started = false, t0 = 0;
+  const DUR = 20000;
+  try { best = +localStorage.getItem('hg_best') || 0; } catch (e) {}
+
+  function resize() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    W = cv.clientWidth; H = cv.clientHeight;
+    cv.width = W * dpr; cv.height = H * dpr;
+    cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  addEventListener('resize', resize); resize();
+
+  function spawn() {
+    const r = 14 + Math.random() * 22;
+    circles.push({ x: r + Math.random() * (W - 2 * r), y: r + Math.random() * (H - 2 * r), r,
+                   born: performance.now(), life: 1400 + Math.random() * 1200 });
+  }
+
+  function hit(px, py) {
+    if (!started) { started = true; t0 = performance.now(); score = 0; circles = []; return; }
+    for (let i = circles.length - 1; i >= 0; i--) {
+      const c = circles[i];
+      if ((px - c.x) ** 2 + (py - c.y) ** 2 <= (c.r + 6) ** 2) {
+        circles.splice(i, 1); score++; return;
+      }
+    }
+    score = Math.max(0, score - 1);
+  }
+  cv.addEventListener('pointerdown', e => {
+    const b = cv.getBoundingClientRect();
+    hit(e.clientX - b.left, e.clientY - b.top);
+  });
+
+  function frame(now) {
+    cx.fillStyle = '#000'; cx.fillRect(0, 0, W, H);
+    cx.textAlign = 'center'; cx.fillStyle = '#fff';
+
+    if (!started) {
+      cx.font = 'bold 28px system-ui'; cx.fillText('hypergames.ai', W / 2, H / 2 - 16);
+      cx.font = '18px system-ui'; cx.fillStyle = '#5ac8ff';
+      cx.fillText('tap to play', W / 2, H / 2 + 20);
+      if (best) { cx.fillStyle = '#888'; cx.fillText('best ' + best, W / 2, H / 2 + 50); }
+      requestAnimationFrame(frame); return;
+    }
+
+    const left = DUR - (now - t0);
+    if (left <= 0) {
+      started = false;
+      if (score > best) { best = score; try { localStorage.setItem('hg_best', best); } catch (e) {} }
+      requestAnimationFrame(frame); return;
+    }
+    if (Math.random() < 0.06 && circles.length < 8) spawn();
+
+    circles = circles.filter(c => now - c.born < c.life);
+    for (const c of circles) {
+      const k = 1 - (now - c.born) / c.life;
+      cx.beginPath(); cx.arc(c.x, c.y, c.r * (0.6 + 0.4 * k), 0, Math.PI * 2);
+      cx.strokeStyle = `rgba(90,200,255,${0.4 + 0.6 * k})`; cx.lineWidth = 3; cx.stroke();
+    }
+    cx.font = 'bold 20px system-ui'; cx.textAlign = 'left';
+    cx.fillText(score, 14, 28);
+    cx.textAlign = 'right'; cx.fillStyle = '#888';
+    cx.fillText((left / 1000).toFixed(1), W - 14, 28);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
