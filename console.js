@@ -21,6 +21,7 @@
     brokenLinkColor: [128, 128, 128],   // <prog> links whose tag doesn't exist
     grayTextColor: [128, 128, 128],     // <grey>: de-emphasised text
     highTextColor: [150, 255, 180],     // <high>: emphasised text (drawn bold, too)
+    imageGap: 2,                // <image-embed> with several images: the gap between them, in character widths
     glow: false,                // bloom off for now (it showed a grid pattern on real GPUs)
     glowColor: [55, 127, 107],  // phosphor bloom is greener than the near-white cores it surrounds
     glowTight: [0.05, 0.35],    // [σ in cap heights, strength]: the halo hugging each glyph
@@ -84,6 +85,10 @@
   // <video-embed ref=YOUTUBE_ID t=SEC> (t optional: start offset in seconds): a 16:9 YouTube player (click to play, loops) in the text area from
   // the current row down to just above the bottom row; text after it goes on the bottom row.
   // Removed by the next clear.
+  // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as tall as
+  // it allows, centred, narrowed to fit if it's too wide; text after it goes on the bottom row.
+  // ref="files/a.png,files/b.jpg": two (or more) side by side, each in an even share of the width.
+  // Removed by the next clear; it and <video-embed> replace each other.
   // <center>text</center>: text centred horizontally on its line (it must fit on one line;
   // tags inside work as usual).
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
@@ -124,8 +129,8 @@
 
   // <bottom-row>/<top-row> is kept in the screen text as this marker, so re-layout (and resizes) re-anchor it.
   const ROW_MARK = '\uE000';
-  // <video-embed> likewise: layout() places the video from wherever this marker falls.
-  const VIDEO_MARK = '\uE001';
+  // <video-embed>/<image-embed> likewise: layout() places the video or image from wherever this marker falls.
+  const MEDIA_MARK = '\uE001';
   // <center>: moves the write head so the text up to </center> ends up centred on its line.
   const CENTER_MARK = '\uE002';
   let screenText = '';
@@ -199,7 +204,7 @@
     const cw = CURSOR.w * cap;
     const bottomRow = Math.max(0, Math.floor(maxH / lineH) - 1);   // last row that fits entirely
     const placed = [];
-    let x = 0, line = 0, k = 0, video = null, videoTop = 0;
+    let x = 0, line = 0, k = 0, media = null, mediaTop = 0;
     let parked = false;            // after <bottom-row delta=1>, before any more text: the cursor's out of sight
     for (const ch of screenText) {                       // by code point, so CJK stays whole
       const attr = attrs[k++];
@@ -211,8 +216,9 @@
         x = Math.max(x, (maxW - runW) / 2);              // never back over text already on the line
         continue;
       }
-      if (ch === VIDEO_MARK) {                           // <video-embed>: from the next whole row; text after it goes on the bottom row
-        video = attr; videoTop = x > 0 ? line + 1 : line; x = 0; line = bottomRow; continue;
+      if (ch === MEDIA_MARK) {                           // <video-embed>, <image-embed>: from the next whole row; text after it goes on the bottom row
+        if (!(media && x === 0 && line === bottomRow)) mediaTop = x > 0 ? line + 1 : line;   // straight after another: its area
+        media = attr; x = 0; line = bottomRow; continue;
       }
       const w = charWidth(ch);
       if (x > 0 && x + w > maxW) { x = 0; line++; }
@@ -227,7 +233,9 @@
     const scroll = Math.max(0, ((parked ? bottomRow : line) + 1) * lineH - maxH);
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
-    placeVideo(video, padY + videoTop * lineH - scroll, Math.max(0, bottomRow - videoTop) * lineH);
+    const mediaY = padY + mediaTop * lineH - scroll, mediaH = Math.max(0, bottomRow - mediaTop) * lineH;
+    placeVideo(media && media.kind === 'video' ? media : null, mediaY, mediaH);   // the last embed wins; the other goes
+    placeImage(media && media.kind === 'image' ? media : null, mediaY, mediaH);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
     linkRects = glyphs.filter(g => isLink(g[4])).map(([, gx, y, w, attr]) => ({ x: gx, top: y - baseOff, w, h: lineH, attr }));
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
@@ -253,6 +261,46 @@
     if (videoFrame.src !== src) videoFrame.src = src;   // only when it changes: re-layout mustn't reload the player
     const areaW = boxW - 2 * padX, w = Math.min(areaW, areaH * 16 / 9);
     Object.assign(videoFrame.style, { left: padX + (areaW - w) / 2 + 'px', top: top + 'px', width: w + 'px', height: w * 9 / 16 + 'px' });
+  }
+  // <image-embed ref="a.png,b.jpg">: one image, or several side by side, in the same area. The text
+  // area's width is split evenly between them (less CFG.imageGap between neighbours); each is the
+  // area's full height, its width from its aspect ratio, narrowed (keeping the ratio) if that's
+  // wider than its share. The row of them is centred, top-aligned. Hidden until they've all loaded
+  // or failed (sizes aren't known before; a failed one drops out). Goes with the screen, too.
+  let imageEls = [];
+  function placeImage(attr, top, areaH) {
+    const srcs = attr ? attr.srcs : [];
+    while (imageEls.length > srcs.length) imageEls.pop().remove();
+    while (imageEls.length < srcs.length) {
+      const el = document.createElement('img');
+      el.className = 'image';
+      el.alt = '';
+      el.draggable = false;
+      el.addEventListener('load', () => { dirty = true; });   // now it has a size: lay out again
+      el.addEventListener('error', () => { dirty = true; console.warn(`console: <image-embed> couldn't load ${el.getAttribute('src')}`); });
+      panel.appendChild(el);
+      imageEls.push(el);
+    }
+    imageEls.forEach((el, i) => { if (el.getAttribute('src') !== srcs[i]) el.src = srcs[i]; });   // only on change: re-layout mustn't reload
+    const hide = el => { el.style.visibility = 'hidden'; };
+    if (!imageEls.every(el => el.complete)) { imageEls.forEach(hide); return; }   // complete: loaded or failed
+    const ok = imageEls.filter(el => el.naturalWidth && el.naturalHeight);
+    imageEls.forEach(el => { if (!ok.includes(el)) hide(el); });
+    if (!ok.length) return;
+    const areaW = boxW - 2 * padX, gap = ok.length > 1 ? CFG.imageGap * charWidth(' ') : 0;
+    const share = (areaW - gap * (ok.length - 1)) / ok.length;
+    const sizes = ok.map(el => {
+      const aspect = el.naturalWidth / el.naturalHeight;
+      let h = areaH, w = h * aspect;
+      if (w > share) { w = share; h = w / aspect; }
+      return [w, h];
+    });
+    let left = padX + (areaW - sizes.reduce((s, [w]) => s + w, 0) - gap * (ok.length - 1)) / 2;
+    ok.forEach((el, i) => {
+      const [w, h] = sizes[i];
+      Object.assign(el.style, { visibility: 'visible', left: left + 'px', top: top + 'px', width: w + 'px', height: h + 'px' });
+      left += w + gap;
+    });
   }
 
 
@@ -641,6 +689,14 @@
         const id = ref && (ref[1] ?? ref[2]);
         if (id && /^[A-Za-z0-9_-]+$/.test(id)) ops.push({ video: id, start: t ? Number(t[1]) : 0 });
       }
+      else if (/^<image-embed\b/.test(m[0])) {
+        // <image-embed ref="files/a.png,files/b.jpg">: one path, or several separated by commas (side
+        // by side); quotes optional (an unquoted ref keeps its slashes, less a trailing one from
+        // "/>"). A missing or empty ref drops the tag.
+        const ref = /\bref\s*=\s*(?:"([^"]*)"|([^\s">]+))/.exec(m[0]);
+        const paths = ref ? (ref[1] ?? ref[2].replace(/\/$/, '')).split(',').map(p => p.trim()).filter(Boolean) : [];
+        if (paths.length) ops.push({ images: paths });
+      }
       else if (/^<(gold|green)-rain\s*\/?>$/.test(m[0])) ops.push({ rainColor: m[0].startsWith('<gold') ? 'gold' : 'green' });
       else if (/^<(slow|normal)-spew\s*\/?>$/.test(m[0])) ops.push({ slow: m[0].startsWith('<slow') });
       else if (/^<\/?grey\s*>$/.test(m[0])) ops.push({ gray: !m[0].startsWith('</') });
@@ -732,7 +788,9 @@
       } else if (op.center !== undefined) {
         typeChar(CENTER_MARK, { kind: 'center', text: op.center });   // a directive: no wait
       } else if (op.video !== undefined) {
-        typeChar(VIDEO_MARK, { kind: 'video', id: op.video, start: op.start });   // a directive: no wait
+        typeChar(MEDIA_MARK, { kind: 'video', id: op.video, start: op.start });   // a directive: no wait
+      } else if (op.images) {
+        typeChar(MEDIA_MARK, { kind: 'image', srcs: op.images });
       } else if (op.row !== undefined) {
         typeChar(ROW_MARK, { kind: 'row', row: op.row });
       } else if (op.rain !== undefined) {

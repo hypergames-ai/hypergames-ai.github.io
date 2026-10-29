@@ -61,12 +61,13 @@ html, body {
   height: 100%;
 }
 
-/* <video-embed> (console.js): a YouTube player over the console text area, above its canvas;
-   console.js sets its position and size in px from the text grid. */
-#video {
+/* <video-embed>, <image-embed> (console.js): a YouTube player or an image over the console text
+   area, above its canvas; console.js sets its position and size in px from the text grid. */
+#video, .image {
   position: absolute;
   z-index: 1;
   display: block;
   border: 0;
-  background: #000;
 }
+#video { background: #000; }
+.image { pointer-events: none; }   /* clicks go through to the canvas */
