@@ -78,6 +78,7 @@
   // <grey>text</grey>: text (links and other tags inside included) in grey rather than
   // green, to de-emphasise it. Every program starts green.
   // <high>text</high>: the opposite: lighter green and bold (not to be combined with <grey>).
+  // Links (<prog>, <a>) are always drawn <high>, unless inside <grey> or broken; < BACK isn't.
   // <freakout hold="1500ms" fade="3000ms">text</freakout>: text that, once typed, holds still for
   // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
   // <goto ref="label"> as the very last characters (instead of <stop>) jumps to that program when
@@ -834,7 +835,8 @@
         if (gray && !op.back) {                           // < BACK after a <cls> stays green
           if (attr) attr.gray = true; else attr = GRAY;
         }
-        if (high && !op.back) {
+        const linkHigh = attr && (attr.kind === 'prog' || attr.kind === 'url') && !gray;   // links are <high>, unless in <grey>
+        if ((high || linkHigh) && !op.back) {
           if (attr) attr.high = true; else attr = HIGH;
         }
         if (skip) {
