@@ -51,7 +51,8 @@
   // followed link shows that program under a clickable "< BACK". <prog ref="label" one-way> has no
   // BACK: the linked program becomes the base page and the nav stack starts over from it.
   // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
-  // stacking on it, so BACK skips it; on the base page it acts as one-way (no BACK).
+  // stacking on it, so BACK skips it, and its BACK reads "< MENU"; on the base page it acts as
+  // one-way (no BACK).
   // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie> clears it. At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
@@ -714,8 +715,8 @@
   }
 
   // → [{ cls: true }, { text: '…', link?, back? }, { delay: ms }, { erase: n }, …]
-  // A linked page (back = true) gets a typed "< BACK" line after every clear.
-  function parse(text, back = false) {
+  // A linked page (back = its label, "< BACK" or "< MENU") gets that typed line after every clear.
+  function parse(text, back = '') {
     const ops = [{ cls: true }];
     const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
                         + '|' + UNKNOWN_TAG, 'g');
@@ -785,7 +786,7 @@
       last = re.lastIndex;
     }
     if (last < text.length) ops.push({ text: text.slice(last) });
-    return back ? ops.flatMap(op => op.cls ? [op, { text: '< BACK', back: true }, { text: '\n\n' }] : [op]) : ops;
+    return back ? ops.flatMap(op => op.cls ? [op, { text: back, back: true }, { text: '\n\n' }] : [op]) : ops;
   }
 
   // The "cookie": a presence-only flag in localStorage (works from file://, no expiry to manage).
@@ -799,8 +800,9 @@
   let gen = 0, running = false, next = 0;
   let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing>
   let noDisplayDelay = false;   // one-shot: next program skips delays and <replace> (BACK sets it)
-  let navStack = [];            // pages to go back to (program indices); empty = on the startup sequence
+  let navStack = [];            // pages to go back to ({ i: program index, back: its BACK label }); empty = on the startup sequence
   let pageIndex = -1;           // the program on screen
+  let pageBack = '';            // and its BACK label ('' on the base page)
   const ABORT = Symbol('abort');
   const CATCH_UP_MS = 250;      // typing more than this far behind schedule restarts the schedule
 
@@ -825,8 +827,9 @@
     });
   }
 
-  async function runProgram(i, g, back = false) {
+  async function runProgram(i, g, back = '') {
     pageIndex = i;
+    pageBack = back;
     const skip = noDisplayDelay;   // no pauses, no typing gaps, no <replace> effect: the text appears at once
     const prog = readProgram(expandConditionals(PROGRAMS[i]));
     const waitsAtStart = waitCount;
@@ -973,32 +976,35 @@
 
   // ---- Pages ---------------------------------------------------------------------------------
 
-  // A linked page runs on its own: it doesn't carry on into the programs after it.
-  function showPage(i) {
+  // A linked page runs on its own: it doesn't carry on into the programs after it. `back` is the
+  // label of its BACK link.
+  const BACK_LABEL = '< BACK', MENU_LABEL = '< MENU';
+  function showPage(i, back) {
     stop();
     running = true;
     const g = ++gen;
-    runProgram(i, g, true).then(() => { if (g === gen) running = false; }, e => { if (e !== ABORT) throw e; });
+    runProgram(i, g, back).then(() => { if (g === gen) running = false; }, e => { if (e !== ABORT) throw e; });
   }
 
   // A one-way link has no < BACK: it clears the stack and makes the program the base page, as run() does.
   // A no-stack link replaces the current page instead of stacking on it, so BACK skips that page;
   // replacing the base page makes the target the new base page, which is just a one-way link.
+  // A page reached by a no-stack link labels its BACK "< MENU" (it skips the pages in between).
   function navigate(label, { oneWay = false, noStack = false } = {}) {
     const i = taggedIndex(label);
     if (i < 0) return;                                    // broken link: no-op
     if (oneWay || (noStack && !navStack.length)) { run(i); return; }
-    if (!noStack) navStack.push(pageIndex);
-    showPage(i);
+    if (!noStack) navStack.push({ i: pageIndex, back: pageBack });
+    showPage(i, noStack ? MENU_LABEL : BACK_LABEL);
   }
 
   // Re-render the previous page instantly. Back on the startup sequence's page, the sequence then
   // carries on after it, unless that program ends with <stop>.
   function back() {
     if (!navStack.length) return;
-    const i = navStack.pop();
+    const { i, back: label } = navStack.pop();
     noDisplayDelay = true;
-    if (navStack.length) showPage(i);
+    if (navStack.length) showPage(i, label);
     else { stop(); next = i; start(); }
   }
 
