@@ -83,7 +83,8 @@
   // hold, then shakes and blurs ever harder over fade, vanishing during its last 20%.
   // <goto ref="label"> as the very last characters (instead of <stop>) jumps to that program when
   // this one finishes, like a one-way link.
-  // <video-embed ref=YOUTUBE_ID t=SEC> (t optional: start offset in seconds): a 16:9 YouTube player (click to play, loops) in the text area from
+  // <video-embed ref=YOUTUBE_ID t=SEC dur=SEC> (t optional: start offset in seconds; dur optional:
+  // pause, holding the frame, that long after t): a 16:9 YouTube player (click to play, loops) in the text area from
   // the current row down to just above the bottom row; text after it goes on the bottom row.
   // Removed by the next clear.
   // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as tall as
@@ -254,9 +255,16 @@
   // ran and the bottom row (kept free for a label and links): as large as fits, horizontally
   // centred, top-aligned. Click to play; loops. It goes with
   // the screen: the next clear (any navigation, <cls>) leaves no marker, so it's removed.
+  // dur=SEC: pauses the player (holding the frame) each time playback reaches t + dur.
   let videoFrame = null;
   function placeVideo(attr, top, areaH) {
-    if (!attr) { if (videoFrame) { videoFrame.remove(); videoFrame = null; } return; }
+    const src = attr && `https://www.youtube.com/embed/${attr.id}?loop=1&playlist=${attr.id}&rel=0&playsinline=1`
+      + (attr.start ? `&start=${attr.start}` : '')
+      + (attr.dur ? `&enablejsapi=1&origin=${encodeURIComponent(location.origin)}` : '');
+    // Only a different video gets a new player (re-layout mustn't reload it). Compared with our own
+    // copy of the src: the player API may rewrite the iframe's.
+    if (videoFrame && (!attr || videoFrame.dataset.src !== src)) { videoFrame.remove(); videoFrame = null; }
+    if (!attr) return;
     if (!videoFrame) {
       videoFrame = document.createElement('iframe');
       videoFrame.id = 'video';
@@ -264,13 +272,46 @@
       videoFrame.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
       videoFrame.allowFullscreen = true;
       videoFrame.referrerPolicy = 'strict-origin-when-cross-origin';   // YouTube refuses embeds without a referrer
+      videoFrame.src = videoFrame.dataset.src = src;
       panel.appendChild(videoFrame);
+      if (attr.dur) pauseAt(videoFrame, attr.start + attr.dur);
     }
-    const src = `https://www.youtube.com/embed/${attr.id}?loop=1&playlist=${attr.id}&rel=0&playsinline=1`
-      + (attr.start ? `&start=${attr.start}` : '');
-    if (videoFrame.src !== src) videoFrame.src = src;   // only when it changes: re-layout mustn't reload the player
     const areaW = boxW - 2 * padX, w = Math.min(areaW, areaH * 16 / 9);
     Object.assign(videoFrame.style, { left: padX + (areaW - w) / 2 + 'px', top: top + 'px', width: w + 'px', height: w * 9 / 16 + 'px' });
+  }
+  // YouTube's IFrame Player API (only the time it reports and pauseVideo() are used), loaded on first use.
+  let youTubeApi = null;
+  function loadYouTubeApi() {
+    youTubeApi ||= new Promise((resolve, reject) => {
+      if (window.YT && window.YT.Player) { resolve(window.YT); return; }
+      const prev = window.onYouTubeIframeAPIReady;
+      window.onYouTubeIframeAPIReady = () => { if (prev) prev(); resolve(window.YT); };
+      const s = document.createElement('script');
+      s.src = 'https://www.youtube.com/iframe_api';
+      s.onerror = () => { youTubeApi = null; reject(new Error("couldn't load https://www.youtube.com/iframe_api")); };
+      document.head.appendChild(s);
+    });
+    return youTubeApi;
+  }
+  // Pauses `frame`'s player when playback runs forward across `at` seconds: not on a seek past it,
+  // nor straight away when play resumes from the pause.
+  const PAUSE_POLL_MS = 50;
+  function pauseAt(frame, at) {
+    loadYouTubeApi().then(YT => {
+      if (videoFrame !== frame) return;                   // gone (or replaced) while the API loaded
+      let timer = 0, last = 0;
+      const player = new YT.Player(frame, { events: { onStateChange: e => {
+        clearInterval(timer);
+        if (e.data !== YT.PlayerState.PLAYING) return;
+        last = player.getCurrentTime();
+        timer = setInterval(() => {
+          if (videoFrame !== frame) { clearInterval(timer); return; }
+          const now = player.getCurrentTime();
+          if (last < at && now >= at && now - last < 1) { clearInterval(timer); player.pauseVideo(); }
+          last = now;
+        }, PAUSE_POLL_MS);
+      } } });
+    }, e => console.warn(`console: <video-embed dur> won't pause: ${e.message}`));
   }
   // <image-embed ref="a.png,b.jpg">: one image, or several side by side, in the same area. The text
   // area's width is split evenly between them (less CFG.imageGap between neighbours); each is the
@@ -693,11 +734,13 @@
         ops.push({ center: inner.filter(op => op.text !== undefined && !op.replaceOld).map(op => op.text).join('') });
       }
       else if (/^<video-embed\b/.test(m[0])) {
-        // <video-embed ref=ID t=SEC>: either order, quotes optional; t (whole seconds, optional
-        // trailing "s") is the start offset. A missing or malformed ref drops the tag.
+        // <video-embed ref=ID t=SEC dur=SEC>: any order, quotes optional; t (whole seconds, optional
+        // trailing "s") is the start offset; dur (seconds, decimals allowed) pauses that long after
+        // t. A missing or malformed ref drops the tag.
         const ref = /\bref\s*=\s*(?:"([^"]*)"|([^\s"\/>]+))/.exec(m[0]), t = /\bt\s*=\s*"?(\d+)s?"?(?=[\s\/>])/.exec(m[0]);
+        const dur = /\bdur\s*=\s*"?(\d+(?:\.\d+)?)s?"?(?=[\s\/>])/.exec(m[0]);
         const id = ref && (ref[1] ?? ref[2]);
-        if (id && /^[A-Za-z0-9_-]+$/.test(id)) ops.push({ video: id, start: t ? Number(t[1]) : 0 });
+        if (id && /^[A-Za-z0-9_-]+$/.test(id)) ops.push({ video: id, start: t ? Number(t[1]) : 0, dur: dur ? Number(dur[1]) : 0 });
       }
       else if (/^<image-embed\b/.test(m[0])) {
         // <image-embed ref="files/a.png,files/b.jpg">: one path, or several separated by commas (side
@@ -798,7 +841,7 @@
       } else if (op.center !== undefined) {
         typeChar(CENTER_MARK, { kind: 'center', text: op.center });   // a directive: no wait
       } else if (op.video !== undefined) {
-        typeChar(MEDIA_MARK, { kind: 'video', id: op.video, start: op.start });   // a directive: no wait
+        typeChar(MEDIA_MARK, { kind: 'video', id: op.video, start: op.start, dur: op.dur });   // a directive: no wait
       } else if (op.images) {
         typeChar(MEDIA_MARK, { kind: 'image', srcs: op.images });
       } else if (op.row !== undefined) {
