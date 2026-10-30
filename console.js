@@ -5,7 +5,7 @@
   'use strict';
 
   const CFG = {
-    charMs: 16,                 // mean gap between typed characters
+    charMs: 1,                 // mean gap between typed characters
     slowCharMs: 60,             // the gap after <slow-spew> (<normal-spew> returns to charMs)
     jitter: 0.5,                // ± fraction of charMs, so typing doesn't tick like a metronome
     eraseMinMs: 30,            // <replace>: gap between backspace pecks, random in [min, max]
