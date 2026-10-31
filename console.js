@@ -60,7 +60,7 @@
   // stacking on it, so BACK skips it, and its BACK reads "< MENU"; on the base page it acts as
   // one-way (no BACK).
   // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
-  // finishes; <delete-cookie> clears it. At launch, if exactly one program starts with <landing>
+  // finishes; <delete-cookie> clears it (and starts the startup sequence over for <in-startup>). At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
   // first; otherwise the flag is cleared and the program tagged start (<tag>start</tag>) runs, or
   // program 0 if none is. Unrecognised tags render as nothing. <stop> as the very last
@@ -71,7 +71,8 @@
   // <tag> outside it.
   // <in-startup>yes<else>no</in-startup>: the same, on whether the startup sequence is still on
   // (true from launch until a program ends the sequence with <stop> or the programs run out; a
-  // <goto> carries it on; false from the start when launch goes straight to the <landing> program).
+  // <goto> carries it on; false from the start when launch goes straight to the <landing> program;
+  // true again after a <delete-cookie>, for the programs that start after it).
   // Templates: <gosub ref="label"> pastes that tagged program in place; its commands run inline.
   // <bottom-row> moves the write head (and cursor) to the left edge of the last visible row;
   // <bottom-row delta=-1> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row fit>
@@ -950,7 +951,8 @@
 
   // stop() and run() bump `gen`; a program from an older generation bails out at its next wait.
   let gen = 0, running = false, next = 0;
-  let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing>
+  let inStartup = true;         // <in-startup>: until the startup sequence ends, or launch goes straight to <landing>;
+                                // <delete-cookie> sets it again
   let noDisplayDelay = false;   // one-shot: next program skips delays and <replace> (BACK sets it)
   let navStack = [];            // pages to go back to ({ i: program index, back: its BACK label }); empty = on the startup sequence
   let pageIndex = -1;           // the program on screen
@@ -1011,6 +1013,7 @@
         if (window.MatrixRain) window.MatrixRain.setRainColor(op.rainColor);
       } else if (op.deleteCookie) {
         deleteCookie();
+        inStartup = true;         // a first visit again, so the startup sequence is on again
       } else if (op.slow !== undefined) {
         charMs = op.slow ? CFG.slowCharMs : CFG.charMs;
       } else if (op.gray !== undefined) {
