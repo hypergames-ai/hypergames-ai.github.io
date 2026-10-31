@@ -62,7 +62,8 @@
   // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie> clears it. At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
-  // first; otherwise the flag is cleared and program 0 runs. Unrecognised tags render as nothing. <stop> as the very last
+  // first; otherwise the flag is cleared and the program tagged start (<tag>start</tag>) runs, or
+  // program 0 if none is. Unrecognised tags render as nothing. <stop> as the very last
   // characters ends the startup sequence after that program.
   // <have-cookie>yes<else>no</have-cookie>: when the program starts, the branch for the flag's
   // state replaces the block verbatim and is then run as usual (<else> required; either branch may
@@ -1281,10 +1282,14 @@
   requestAnimationFrame(frame);
 
   // Launch: a returning visitor (flag set, exactly one <landing> program) starts on the landing
-  // program. Otherwise the flag is cleared and the sequence starts at 0. (Rain starts only from a
-  // program's <start-rain>.)
+  // program. Otherwise the flag is cleared and the sequence starts at the program tagged start
+  // (program 0 if there's none). (Rain starts only from a program's <start-rain>.)
   const landings = PROGRAMS.filter(p => readProgram(p).landing);
   if (landings.length !== 1) deleteCookie();
   if (hasCookie()) { next = PROGRAMS.indexOf(landings[0]); inStartup = false; }
+  else {
+    next = taggedIndex('start');
+    if (next < 0) { console.warn('console: no program tagged start; starting at program 0'); next = 0; }
+  }
   start();
 })();

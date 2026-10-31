@@ -95,8 +95,8 @@ portrait the 40-column grid fits the wider panel, so the type grows and there ar
 
 ## Console
 
-`console.js` runs programs 0–5 once from launch, then leaves the screen as the last one left
-it. Each program clears the screen, then types
+`console.js` runs the startup sequence once from launch, starting at the program tagged `start`
+(`<tag>start</tag>`) and going on in order, then leaves the screen as the last one left it. Each program clears the screen, then types
 its text one character at a time (`CFG.charMs`, default 16 ms, ±50% jitter). Program syntax:
 
 | In the program text | Effect |
@@ -174,7 +174,7 @@ they're included.
 
 **Returning visitors:** the "cookie" is a presence-only flag in `localStorage`
 (key `skip_long_intro`), so it also works from `file://`. At launch, if the number of programs starting
-with `<landing>` isn't exactly one, the flag is cleared. With no flag, the console starts at program 0;
+with `<landing>` isn't exactly one, the flag is cleared. With no flag, the console starts at the program tagged `start` (program 0 if none is);
 with the flag, the `<landing>` program runs first (as the base page). Either way the rain appears
 only when a program runs `<start-rain>` — put one at the top of the landing program to have rain
 straight away for returning visitors. Clearing the site's data resets it.
