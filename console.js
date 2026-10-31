@@ -1236,6 +1236,16 @@
     if (link && link.kind === 'url') followUrl(link, true);
   });
 
+  // Full-screen toggle (index.html #size-toggle): the panel fills the window or goes back to its
+  // normal size. A class change fires no window resize, so lay out at once.
+  const sizeToggle = document.getElementById('size-toggle');
+  sizeToggle.addEventListener('click', () => {
+    const full = panel.classList.toggle('full');
+    sizeToggle.setAttribute('aria-pressed', String(full));
+    sizeToggle.setAttribute('aria-label', full ? 'Normal size' : 'Full screen');
+    resize();
+  });
+
   // Re-measure and redraw, e.g. after changing CFG.
   function refresh() {
     fontPx = 0;

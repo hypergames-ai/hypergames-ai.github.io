@@ -309,8 +309,6 @@
     cellDev = cell * dpr;
     const newCols = Math.ceil(w / cell);
     const newRows = Math.ceil(h / cell);
-    panelRect = panel.getBoundingClientRect();
-    panelBorder = parseFloat(getComputedStyle(panel).borderTopWidth) || 0;
     particles = [];             // pixel positions are meaningless at the new size
     dashes = [];
     fxDirty = false;            // #fx was just cleared by the resize
@@ -332,14 +330,21 @@
       for (let x = 0; x < cols; x++) for (let k = 0; k < CFG.dropsPerColumn; k++) drops.push(newDrop(x));
     }
 
+    readPanel();
+    renderRain();               // resizing cleared the canvas
+  }
+
+  // The panel's geometry and the cells it hides. Also run when only the panel changes size
+  // (console.js's full-screen toggle), which fires no window resize.
+  function readPanel() {
+    panelRect = panel.getBoundingClientRect();
+    panelBorder = parseFloat(getComputedStyle(panel).borderTopWidth) || 0;
     hiddenGrid = new Uint8Array(cols * rows);
     const { left, right, top, bottom } = panelRect;
     for (let x = 0; x < cols; x++) {
       if (x * cell < left || (x + 1) * cell > right) continue;
       for (let y = 0; y < rows; y++) if (y * cell >= top && (y + 1) * cell <= bottom) hiddenGrid[x * rows + y] = 1;
     }
-
-    renderRain();               // resizing cleared the canvas
   }
 
   let resizeTimer = 0;
@@ -376,6 +381,12 @@
 
   window.addEventListener('resize', scheduleResize);
   if (window.visualViewport) window.visualViewport.addEventListener('resize', scheduleResize);
+  if (window.ResizeObserver) new ResizeObserver(() => {
+    if (!cols) return;          // before the first resize()
+    readPanel();
+    particles = []; dashes = []; fxDirty = true;   // splashes on the old edge go; #fx clears next frame
+    renderRain();
+  }).observe(panel);
   reduceQuery.addEventListener('change', refresh);
   watchDpr();
 

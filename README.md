@@ -23,7 +23,7 @@ GitHub Pages can serve the repository root as-is.
 
 | File | What it does |
 |---|---|
-| `index.html` | Two canvases with the panel between them; inline SVG favicon |
+| `index.html` | Two canvases with the panel between them, the panel's full-screen button; inline SVG favicon |
 | `style.css` | Fixed full-viewport layers, no scrolling, panel size/centring/border/glow |
 | `rain.js` | Config, resize/DPR handling, rain simulation, splashes, render loop |
 | `console.js` | Console programs, parser, runner, text layout (word wrap, centred runs, embeds and their captions), heartbeat cursor and WebGL glow |
@@ -64,6 +64,12 @@ The text after an image waits until the image has loaded, so its caption doesn't
 The panel is `75vw × 50vh` (`50dvh` where supported), defined only in `style.css`. `rain.js`
 reads its geometry from the DOM on every resize, so changing the panel's CSS keeps the splashes
 aligned.
+
+The green diagonal arrow in the panel's bottom-right corner (`#size-toggle`) switches the panel
+between that size and the whole window (`#panel.full`), with no transition. The text lays out
+afresh for the new size: in landscape the font stays and there are more columns and rows; in
+portrait the 40-column grid fits the wider panel, so the type grows and there are more rows.
+`rain.js` watches the panel with a `ResizeObserver`, so it follows the toggle too.
 
 ## Tuning: `CFG` at the top of `rain.js`
 

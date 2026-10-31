@@ -70,6 +70,31 @@ html, body {
   }
 }
 
+/* Full screen (the #size-toggle button, console.js): the panel fills the window, no transition. */
+#panel.full {
+  width: 100vw;
+  height: 100vh; height: 100dvh;
+}
+
+/* Full-screen toggle: just the icon, in the panel's bottom-right padding corner, so it stays off
+   the text grid; above any embed. */
+#size-toggle {
+  position: absolute; right: 0; bottom: 0;
+  z-index: 2;
+  width: min(1.5vmax, 1.5vh * 16 / 9);
+  width: min(1.5vmax, 1.5dvh * 16 / 9);
+  height: min(1.5vmax, 1.5vh * 16 / 9);
+  height: min(1.5vmax, 1.5dvh * 16 / 9);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: rgb(68, 232, 127);   /* console.js CFG.textColor */
+  cursor: pointer;
+}
+#size-toggle svg { display: block; width: 100%; height: 100%; }
+#size-toggle:focus { outline: none; }
+#size-toggle:focus-visible { outline: 1px solid rgb(68, 232, 127); }
+
 /* Console (console.js): a canvas over the panel's padding box; text, cursor and glow are drawn
    in WebGL. Its font, colours and heartbeat live in console.js CFG. */
 #console {
