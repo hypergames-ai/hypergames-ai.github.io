@@ -13,6 +13,12 @@
   font-display: block;
 }
 
+/* The panel's size in portrait windows, in vw and dvh (vh where dvh isn't supported). */
+:root {
+  --portrait-panel-w: 90;
+  --portrait-panel-h: 70;
+}
+
 /* Fixed full-viewport composition: nothing is in normal flow, so nothing can scroll. */
 html, body {
   margin: 0;
@@ -49,6 +55,19 @@ html, body {
      console font does (console.js CFG.maxAspect), so the text keeps its rows when the window shortens. */
   padding: min(1.5vmax, 1.5vh * 16 / 9);
   padding: min(1.5vmax, 1.5dvh * 16 / 9);
+}
+
+/* Portrait: more of a narrow screen for the panel (console.js sizes its font to a fixed grid
+   there). The fallback can't be a second declaration: one with var() that the browser can't
+   use is dropped at computed-value time, not skipped, so dvh goes in its own @supports. */
+@media (orientation: portrait) {
+  #panel {
+    width: calc(var(--portrait-panel-w) * 1vw);
+    height: calc(var(--portrait-panel-h) * 1vh);
+  }
+  @supports (height: 1dvh) {
+    #panel { height: calc(var(--portrait-panel-h) * 1dvh); }
+  }
 }
 
 /* Console (console.js): a canvas over the panel's padding box; text, cursor and glow are drawn

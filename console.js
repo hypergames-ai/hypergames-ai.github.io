@@ -14,6 +14,10 @@
     maxAspect: 16 / 9,          // in wider windows the font follows the height (as #panel's padding
                                 // does in style.css), so the panel always fits the 16:9 row count
     lineHeight: 1.25,           // em
+    // Portrait windows (style.css gives the panel more of the screen there): instead of following
+    // the height, the font is as large as lets the text area hold this many columns and rows.
+    portraitCols: 40,
+    portraitRows: 34,
     // Halfway between the film frame's pale mint (text 135,209,189; cursor 197,218,212) and the
     // rain's green (0,255,65), so the console doesn't jump out from the rain around it.
     textColor: [68, 232, 127],
@@ -145,6 +149,7 @@
   const src = document.createElement('canvas');          // glyphs in white; coverage in alpha
   const sctx = src.getContext('2d');
   const reduceQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const portraitQuery = window.matchMedia('(orientation: portrait)');   // the same test as style.css's
 
   // ---- Screen state -------------------------------------------------------------------------
 
@@ -761,7 +766,15 @@
     padX = parseFloat(cs.paddingLeft) || 0;
     padY = parseFloat(cs.paddingTop) || 0;
     const vw = window.innerWidth, vh = window.innerHeight;
-    fontPx = CFG.fontVmax * Math.min(Math.max(vw, vh), vh * CFG.maxAspect) / 100;
+    if (portraitQuery.matches) {
+      // Fit the CFG.portraitCols × portraitRows grid to the text area. Courier Prime's advance is
+      // measured per em; a hair under the exact fit so float error can't cost a column or row.
+      sctx.font = `100px ${FONT_STACK}`;
+      const advance = sctx.measureText('M').width / 100;
+      fontPx = 0.99999 * Math.min((w - 2 * padX) / (CFG.portraitCols * advance), (h - 2 * padY) / (CFG.portraitRows * CFG.lineHeight));
+    } else {
+      fontPx = CFG.fontVmax * Math.min(Math.max(vw, vh), vh * CFG.maxAspect) / 100;
+    }
     for (const c of [canvas, src]) { c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr)); }
     fbo = null;
     measure();

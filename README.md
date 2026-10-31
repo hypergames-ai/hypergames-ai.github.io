@@ -41,6 +41,13 @@ follow the height instead (as if the window were 16:9), so the panel always fits
 it shows at 1920×1080 and a shorter window shrinks the text rather than losing rows. Narrower and
 portrait windows show more rows.
 
+Portrait windows are sized differently. The panel takes `90vw × 70dvh` (the `--portrait-panel-w`
+and `--portrait-panel-h` custom properties at the top of `style.css`), and the console's font is as
+large as lets the text area hold a fixed grid: `CFG.portraitCols` × `CFG.portraitRows` in
+`console.js` (40 × 34). Whichever of the two runs out first sets the size, so a phone gets exactly
+40 columns and a portrait tablet gets more columns at 34 rows. Both sides test
+`(orientation: portrait)`, so CSS and JS switch together; landscape is unaffected.
+
 Since the column count changes with the window, the console wraps text by word: a line breaks
 at the last space that fits, the spaces at the break hang off its end, and only a word wider than
 the whole line breaks mid-word. Copy needs no hand-placed line breaks; a `\n` is a hard break and
