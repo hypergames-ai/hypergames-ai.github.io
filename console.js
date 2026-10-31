@@ -163,9 +163,10 @@
   const CENTER_MARK = '\uE002';
   let screenText = '';
   let attrs = [];                // per code point of screenText: null, or the link object it belongs to
-  // The rest of the text op being typed, not on screen yet. layout() measures the word in progress
-  // through to its end, so a word that won't fit starts on the next line from its first character
-  // rather than jumping there once it overflows.
+  // Text still to come, not on screen yet: the rest of the text op being typed, then the start of
+  // the ones after it (see wordAhead()). layout() measures the word in progress through to its end,
+  // so a word that won't fit starts on the next line from its first character rather than jumping
+  // there once it overflows, even when its end comes in a later op (<high>cyborgs</high>:).
   let pendingText = '';
   let typing = false;
   let beatStart = performance.now();
@@ -985,7 +986,8 @@
     const waitsAtStart = waitCount;
     let charMs = CFG.charMs;       // <slow-spew>/<normal-spew> switch it; every program starts normal
     let gray = false, high = false;   // inside <grey>, <high>
-    for (const op of parse(stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [])), back)) {
+    const ops = parse(stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [])), back);
+    for (const [i, op] of ops.entries()) {
       if (skip && (op.delay !== undefined || op.erase !== undefined || op.replaceOld)) continue;
       if (op.cls) {
         clearScreen();
@@ -1047,6 +1049,7 @@
         // Type to a schedule, not a fixed sleep per character: timers always fire a little late,
         // and that lateness would add up. Sleep only when ahead; when behind, type straight away.
         let due = performance.now(), typed = 0;
+        const ahead = wordAhead(ops, i + 1);              // where this op's last word goes on
         try {
           for (const ch of op.text) {                     // by code point; typed counts UTF-16 units for slicing
             due += charMs * (1 + CFG.jitter * (2 * Math.random() - 1));
@@ -1055,11 +1058,13 @@
             if (due > now) await wait(due - now, g);
             else if (g !== gen) throw ABORT;
             typed += ch.length;
-            pendingText = op.text.slice(typed);           // layout()'s lookahead: what's still to come
+            pendingText = op.text.slice(typed) + ahead;   // layout()'s lookahead: what's still to come
             typeChar(ch, attr);
           }
         } finally {
-          if (g === gen) pendingText = '';                // a newer program may own it by now (stop() cleared ours)
+          // Through any pause or style change before the next op, until it takes over. Unless a newer
+          // program owns it by now (stop() cleared ours).
+          if (g === gen) pendingText = ahead;
         }
         if (op.freak) { attr.t0 = performance.now(); dirty = true; }   // its hold starts once it's all there
         setTyping(false);
@@ -1069,6 +1074,23 @@
     if (prog.makeCookie) makeCookie();                    // <stop make-cookie>: only on a completed run
     if (prog.goto !== undefined) return scheduleGoto(prog.goto, g, waitCount === waitsAtStart);
     if (prog.stop) return 'stop';
+  }
+
+  // The text the ops from ops[j] on will type before the word in progress ends: up to the first
+  // space or \n, through pauses and style changes (<delay>, <high>, links, …), and stopping at
+  // anything that moves the write head (<cls>, row tags, <center>, embeds, <replace>'s backspacing).
+  function wordAhead(ops, j) {
+    let s = '';
+    for (; j < ops.length; j++) {
+      const op = ops[j];
+      if (op.cls || op.erase !== undefined || op.bottomRow !== undefined || op.row !== undefined
+          || op.center !== undefined || op.video !== undefined || op.images) break;
+      if (op.text === undefined) continue;
+      const end = op.text.search(/[ \n]/);
+      if (end >= 0) return s + op.text.slice(0, end);
+      s += op.text;
+    }
+    return s;
   }
 
   // <goto ref="label"> at the end of a completed program: jump like a one-way link (stack cleared,

@@ -52,8 +52,9 @@ Since the column count changes with the window, the console wraps text by word: 
 at the last space that fits, the spaces at the break hang off its end, and only a word wider than
 the whole line breaks mid-word. Copy needs no hand-placed line breaks; a `\n` is a hard break and
 blank lines stay paragraph gaps. While a word is being typed, the layout measures the rest of it
-(up to the next space) ahead of time, so a word that won't fit starts on the next line from its
-first letter rather than jumping there halfway. A `<center>` run longer than a line wraps the same
+(up to the next space, even when it carries on past a tag, a pause or a link's end) ahead of time,
+so a word that won't fit starts on the next line from its first letter rather than jumping there
+halfway. A `<center>` run longer than a line wraps the same
 way, worked out from its full text, and each row is centred on its own. A centred caption straight
 after an `<image-embed>` or `<video-embed>` takes as many rows as it wraps to, and the image or
 video sizes itself to the space left. When that leaves room (a single picture in a tall window),
