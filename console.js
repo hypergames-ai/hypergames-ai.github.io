@@ -86,14 +86,16 @@
   // this one finishes, like a one-way link.
   // <video-embed ref=YOUTUBE_ID t=SEC dur=SEC> (t optional: start offset in seconds; dur optional:
   // pause, holding the frame, that long after t): a 16:9 YouTube player (click to play, loops) in the text area from
-  // the current row down to just above the bottom row; text after it goes on the bottom row.
+  // the current row down to just above the bottom row; text after it goes on the bottom row (a
+  // <center> caption that wraps: on as many rows as it needs, ending there).
   // Removed by the next clear.
   // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as tall as
   // it allows, centred, narrowed to fit if it's too wide; text after it goes on the bottom row.
   // ref="files/a.png,files/b.jpg": two (or more) side by side, each in an even share of the width.
   // Removed by the next clear; it and <video-embed> replace each other.
-  // <center>text</center>: text centred horizontally on its line (it must fit on one line;
-  // tags inside work as usual).
+  // <center>text</center>: text centred horizontally; if it's longer than a line it wraps by word
+  // and each row is centred (tags inside work as usual). Straight after an embed, it's a caption:
+  // its last row on the bottom row, the embed's area ending above its first.
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
   // download instead, target="_blank" for a new tab).
   const PROGRAMS = [
@@ -151,11 +153,15 @@
   const CENTER_MARK = '\uE002';
   let screenText = '';
   let attrs = [];                // per code point of screenText: null, or the link object it belongs to
+  // The rest of the text op being typed, not on screen yet. layout() measures the word in progress
+  // through to its end, so a word that won't fit starts on the next line from its first character
+  // rather than jumping there once it overflows.
+  let pendingText = '';
   let typing = false;
   let beatStart = performance.now();
   let dirty = true;              // text or geometry changed: re-lay out and re-upload the glyphs
 
-  function clearScreen() { screenText = ''; attrs = []; dirty = true; }
+  function clearScreen() { screenText = ''; attrs = []; pendingText = ''; dirty = true; }
   function typeChar(ch, attr = null) { screenText += ch; attrs.push(attr); dirty = true; }
 
   function deleteChar() {                               // backspace: drop the last code point
@@ -215,41 +221,126 @@
   const GRAY = { gray: true };   // the attr of plain text inside <grey>
   const HIGH = { high: true };   // and inside <high>
 
+  // Word wrap, fed one code point at a time (the caller handles \n and the markers, after flush()).
+  // A word (a run of anything but spaces) is held back until it ends, so the break can go in front
+  // of it: a word that won't fit after the text before it starts the next line, and one wider than
+  // a whole line falls back to breaking wherever its next glyph won't fit. Spaces never break: at a
+  // break they hang off the end of the line instead of starting the next one, trimmed to the edge
+  // so a link's underline and hit area stop there. put(ch, x, line, w, attr) receives each glyph.
+  function wordWrap(maxW, put) {
+    const pen = { x: 0, line: 0 };
+    let word = [], wordW = 0;
+    // tailW: the rest of the word, not typed yet. It counts toward the break but isn't placed.
+    function flush(tailW = 0) {
+      const long = wordW + tailW > maxW;
+      if (word.length && !long && pen.x > 0 && pen.x + wordW + tailW > maxW) { pen.x = 0; pen.line++; }
+      for (const [ch, w, attr] of word) {
+        if (long && pen.x > 0 && pen.x + w > maxW) { pen.x = 0; pen.line++; }
+        put(ch, pen.x, pen.line, w, attr);
+        pen.x += w;
+      }
+      word = []; wordW = 0;
+    }
+    function feed(ch, attr) {
+      const w = charWidth(ch);
+      if (ch !== ' ') { word.push([ch, w, attr]); wordW += w; return; }
+      flush();
+      put(ch, pen.x, pen.line, Math.max(0, Math.min(w, maxW - pen.x)), attr);
+      pen.x += w;
+    }
+    return { pen, feed, flush };
+  }
+
+  // <center>: the run's whole text wrapped as above (a \n in it is a forced break), then each row
+  // centred on its own. Worked out from the full text, so a run being typed never shifts.
+  // → at: per code point [x from its row's start, row from the run's first, drawn width]; for a \n,
+  // where the pen goes. off: each row's start x; rowW: each row's width; rows: how many.
+  function wrapCentred(text, maxW) {
+    const at = [], rowW = [], ink = [], hard = [];
+    const wrap = wordWrap(maxW, (ch, x, row, w) => {
+      at.push([x, row, w]);
+      rowW[row] = x + w;
+      if (ch !== ' ') ink[row] = x + w;                  // a row ended by a wrap: its hanging spaces don't count
+    });
+    for (const ch of text) {
+      if (ch !== '\n') { wrap.feed(ch); continue; }
+      wrap.flush();
+      hard[wrap.pen.line] = true;
+      wrap.pen.x = 0; wrap.pen.line++;
+      at.push([0, wrap.pen.line, 0]);
+    }
+    wrap.flush();
+    const rows = wrap.pen.line + 1;
+    for (let r = 0; r < rows; r++) rowW[r] = (hard[r] || r === rows - 1 ? rowW[r] : ink[r]) || 0;
+    return { at, rowW, rows, off: rowW.map(w => w > 0 ? Math.max(0, (maxW - w) / 2) : 0) };
+  }
+
   function layout() {
     const maxW = boxW - 2 * padX, maxH = boxH - 2 * padY;
     const cw = CURSOR.w * cap;
     const bottomRow = Math.max(0, Math.floor(maxH / lineH) - 1);   // last row that fits entirely
     const placed = [];
-    let x = 0, line = 0, k = 0, media = null, mediaTop = 0;
+    const wrap = wordWrap(maxW, (ch, x, l, w, attr) => placed.push([ch, x, l, w, attr]));
+    const pen = wrap.pen;
+    const centred = new Map();                           // <center> attr → wrapCentred(), once per layout
+    const centredRun = attr => centred.get(attr) || centred.set(attr, wrapCentred(attr.text, maxW)).get(attr);
+    let k = 0, media = null, mediaTop = 0, mediaEnd = bottomRow;
     let parked = false;            // after <bottom-row delta=1>, before any more text: the cursor's out of sight
+    // A <center> run being placed: its next code points come from its table, not from wrap.
+    let run = null, runText = [], runAt = 0, runX = 0, runLine = 0;
     for (const ch of screenText) {                       // by code point, so CJK stays whole
       const attr = attrs[k++];
-      if (ch === '\n') { x = 0; line++; parked = false; continue; }
-      if (ch === ROW_MARK) { x = 0; line = attr.row ?? Math.max(0, bottomRow + attr.delta); parked = attr.delta > 0; continue; }   // <bottom-row>, <top-row>
-      if (ch === CENTER_MARK) {                          // <center>: start where the whole run will be centred
-        let runW = 0;
-        for (const c of attr.text) runW += charWidth(c);
-        x = Math.max(x, (maxW - runW) / 2);              // never back over text already on the line
+      if (run && runText[runAt] !== ch) run = null;      // past its end, or not its text (<replace>'s old text): plain wrap from here
+      if (run) {
+        const [rx, row, w] = run.at[runAt++];
+        const x = (row ? run.off[row] : runX) + rx;
+        pen.line = runLine + row;
+        if (ch === '\n') pen.x = x;
+        else { placed.push([ch, x, pen.line, w, attr]); pen.x = x + w; }
+        parked = false;
         continue;
       }
-      if (ch === MEDIA_MARK) {                           // <video-embed>, <image-embed>: from the next whole row; text after it goes on the bottom row
-        if (!(media && x === 0 && line === bottomRow)) mediaTop = x > 0 ? line + 1 : line;   // straight after another: its area
-        media = attr; x = 0; line = bottomRow; continue;
+      if (ch === '\n') { wrap.flush(); pen.x = 0; pen.line++; parked = false; continue; }
+      if (ch === ROW_MARK) {                             // <bottom-row>, <top-row>
+        wrap.flush();
+        pen.x = 0; pen.line = attr.row ?? Math.max(0, bottomRow + attr.delta); parked = attr.delta > 0;
+        continue;
       }
-      const w = charWidth(ch);
-      if (x > 0 && x + w > maxW) { x = 0; line++; }
-      placed.push([ch, x, line, w, attr]);
-      x += w;
+      if (ch === CENTER_MARK) {                          // <center>: each row of the run where it'll be centred
+        wrap.flush();
+        run = centredRun(attr); runText = Array.from(attr.text); runAt = 0;
+        runX = Math.max(pen.x, run.off[0]);              // never back over text already on the line;
+        if (pen.x > 0 && runX + run.rowW[0] > maxW) { pen.line++; runX = run.off[0]; }   // a row of its own if it won't fit after it
+        runLine = pen.line; pen.x = runX;
+        continue;
+      }
+      if (ch === MEDIA_MARK) {                           // <video-embed>, <image-embed>: from the next whole row; text after it at the bottom
+        wrap.flush();
+        if (!(media && pen.x === 0 && pen.line === mediaEnd)) mediaTop = pen.x > 0 ? pen.line + 1 : pen.line;   // straight after another: its area
+        media = attr; pen.x = 0;
+        // A centred caption straight after it ends on the bottom row, however many rows it wraps
+        // to, and the media area stops above its first; any other text starts on the bottom row.
+        const caption = attrs[k] && attrs[k].kind === 'center' ? centredRun(attrs[k]) : null;
+        mediaEnd = caption ? Math.max(Math.min(mediaTop, bottomRow), bottomRow - (caption.rows - 1)) : bottomRow;
+        pen.line = mediaEnd;
+        continue;
+      }
+      wrap.feed(ch, attr);
       parked = false;
     }
-    let cx = x > 0 ? x + cursorOffset : 0;
+    // The word in progress goes where the whole of it will fit: its untyped rest (up to the next
+    // space) counts toward the break but isn't drawn, and the cursor stays after the last typed glyph.
+    let tailW = 0;
+    for (const c of pendingText) { if (c === ' ' || c === '\n') break; tailW += charWidth(c); }
+    wrap.flush(tailW);
+    let line = pen.line, cx = pen.x > 0 ? pen.x + cursorOffset : 0;
     if (cx > 0 && cx + cw > maxW) { cx = 0; line++; }
     // If the text ever outgrows the panel, scroll so the cursor's line stays visible (not a
     // parked cursor's: that row is below the last one on purpose).
     const scroll = Math.max(0, ((parked ? bottomRow : line) + 1) * lineH - maxH);
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
-    const mediaY = padY + mediaTop * lineH - scroll, mediaH = Math.max(0, bottomRow - mediaTop) * lineH;
+    const mediaY = padY + mediaTop * lineH - scroll, mediaH = Math.max(0, mediaEnd - mediaTop) * lineH;
     placeVideo(media && media.kind === 'video' ? media : null, mediaY, mediaH);   // the last embed wins; the other goes
     placeImage(media && media.kind === 'image' ? media : null, mediaY, mediaH);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
@@ -897,14 +988,20 @@
         setTyping(true);                                  // steady while typing, heartbeat when idle
         // Type to a schedule, not a fixed sleep per character: timers always fire a little late,
         // and that lateness would add up. Sleep only when ahead; when behind, type straight away.
-        let due = performance.now();
-        for (const ch of op.text) {
-          due += charMs * (1 + CFG.jitter * (2 * Math.random() - 1));
-          const now = performance.now();
-          if (now - due > CATCH_UP_MS) due = now;         // after a stall (hidden tab), resume rather than burst
-          if (due > now) await wait(due - now, g);
-          else if (g !== gen) throw ABORT;
-          typeChar(ch, attr);
+        let due = performance.now(), typed = 0;
+        try {
+          for (const ch of op.text) {                     // by code point; typed counts UTF-16 units for slicing
+            due += charMs * (1 + CFG.jitter * (2 * Math.random() - 1));
+            const now = performance.now();
+            if (now - due > CATCH_UP_MS) due = now;       // after a stall (hidden tab), resume rather than burst
+            if (due > now) await wait(due - now, g);
+            else if (g !== gen) throw ABORT;
+            typed += ch.length;
+            pendingText = op.text.slice(typed);           // layout()'s lookahead: what's still to come
+            typeChar(ch, attr);
+          }
+        } finally {
+          if (g === gen) pendingText = '';                // a newer program may own it by now (stop() cleared ours)
         }
         if (op.freak) { attr.t0 = performance.now(); dirty = true; }   // its hold starts once it's all there
         setTyping(false);
@@ -967,6 +1064,8 @@
   function stop() {
     running = false;
     gen++;
+    pendingText = '';             // the program typing it is done for; it only notices at its next wait
+    dirty = true;
     setTyping(false);
   }
 
