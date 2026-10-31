@@ -65,7 +65,7 @@ The panel is `75vw × 50vh` (`50dvh` where supported), defined only in `style.cs
 reads its geometry from the DOM on every resize, so changing the panel's CSS keeps the splashes
 aligned.
 
-The green diagonal arrow in the panel's bottom-right corner (`#size-toggle`) switches the panel
+The green diagonal arrow in the panel's top-right corner (`#size-toggle`) switches the panel
 between that size and the whole window (`#panel.full`), with no transition. The text lays out
 afresh for the new size: in landscape the font stays and there are more columns and rows; in
 portrait the 40-column grid fits the wider panel, so the type grows and there are more rows.
