@@ -89,9 +89,9 @@
   // the current row down to just above the bottom row; text after it goes on the bottom row (a
   // <center> caption that wraps: on as many rows as it needs, ending there).
   // Removed by the next clear.
-  // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as tall as
-  // it allows, centred, narrowed to fit if it's too wide; text after it goes on the bottom row.
-  // ref="files/a.png,files/b.jpg": two (or more) side by side, each in an even share of the width.
+  // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as large as
+  // fits, centred; text after it goes on the bottom row.
+  // ref="files/a.png,files/b.jpg": two (or more) in a row or a column, whichever shows them larger.
   // Removed by the next clear; it and <video-embed> replace each other.
   // <center>text</center>: text centred horizontally; if it's longer than a line it wraps by word
   // and each row is centred (tags inside work as usual). Straight after an embed, it's a caption:
@@ -348,8 +348,8 @@
     if (hoverLink && !attrs.includes(hoverLink)) setHover(null);   // the hovered link left the screen
   }
   // <video-embed ref=id>: one 16:9 YouTube player in the text area between the row where the tag
-  // ran and the bottom row (kept free for a label and links): as large as fits, horizontally
-  // centred, top-aligned. Click to play; loops. It goes with
+  // ran and the bottom row (kept free for a label and links): as large as fits, centred both
+  // ways. Click to play; loops. It goes with
   // the screen: the next clear (any navigation, <cls>) leaves no marker, so it's removed.
   // dur=SEC: pauses the player (holding the frame) each time playback reaches t + dur.
   let videoFrame = null;
@@ -372,8 +372,8 @@
       panel.appendChild(videoFrame);
       if (attr.dur) pauseAt(videoFrame, attr.start + attr.dur);
     }
-    const areaW = boxW - 2 * padX, w = Math.min(areaW, areaH * 16 / 9);
-    Object.assign(videoFrame.style, { left: padX + (areaW - w) / 2 + 'px', top: top + 'px', width: w + 'px', height: w * 9 / 16 + 'px' });
+    const areaW = boxW - 2 * padX, w = Math.min(areaW, areaH * 16 / 9), h = w * 9 / 16;
+    Object.assign(videoFrame.style, { left: padX + (areaW - w) / 2 + 'px', top: top + (areaH - h) / 2 + 'px', width: w + 'px', height: h + 'px' });
   }
   // YouTube's IFrame Player API (only the time it reports and pauseVideo() are used), loaded on first use.
   let youTubeApi = null;
@@ -409,11 +409,11 @@
       } } });
     }, e => console.warn(`console: <video-embed dur> won't pause: ${e.message}`));
   }
-  // <image-embed ref="a.png,b.jpg">: one image, or several side by side, in the same area. The text
-  // area's width is split evenly between them (less CFG.imageGap between neighbours); each is the
-  // area's full height, its width from its aspect ratio, narrowed (keeping the ratio) if that's
-  // wider than its share. The row of them is centred, top-aligned. Hidden until they've all loaded
-  // or failed (sizes aren't known before; a failed one drops out). Goes with the screen, too.
+  // <image-embed ref="a.png,b.jpg">: one image, or several, in the same area. Several go in a row
+  // (one height, widths from their aspect ratios) or a column (one width), CFG.imageGap apart,
+  // whichever makes the images larger in all; first = left, or top. As large as fits, centred in
+  // the area both ways. Hidden until they've all loaded or failed (sizes aren't known before; a
+  // failed one drops out). Goes with the screen, too.
   let imageEls = [];
   function placeImage(attr, top, areaH) {
     const srcs = attr ? attr.srcs : [];
@@ -434,19 +434,21 @@
     const ok = imageEls.filter(el => el.naturalWidth && el.naturalHeight);
     imageEls.forEach(el => { if (!ok.includes(el)) hide(el); });
     if (!ok.length) return;
-    const areaW = boxW - 2 * padX, gap = ok.length > 1 ? CFG.imageGap * charWidth(' ') : 0;
-    const share = (areaW - gap * (ok.length - 1)) / ok.length;
-    const sizes = ok.map(el => {
-      const aspect = el.naturalWidth / el.naturalHeight;
-      let h = areaH, w = h * aspect;
-      if (w > share) { w = share; h = w / aspect; }
-      return [w, h];
-    });
-    let left = padX + (areaW - sizes.reduce((s, [w]) => s + w, 0) - gap * (ok.length - 1)) / 2;
+    const areaW = boxW - 2 * padX, gap = CFG.imageGap * charWidth(' '), gaps = (ok.length - 1) * gap;
+    const aspects = ok.map(el => el.naturalWidth / el.naturalHeight);
+    // A row of height h is h·Σaspect + gaps wide; a column of width w is w·Σ(1/aspect) + gaps tall.
+    // Each is as large as fits; the images' total area is then h²·Σaspect or w²·Σ(1/aspect).
+    const sumA = aspects.reduce((s, a) => s + a, 0), sumInv = aspects.reduce((s, a) => s + 1 / a, 0);
+    const rowH = Math.max(0, Math.min(areaH, (areaW - gaps) / sumA));
+    const colW = Math.max(0, Math.min(areaW, (areaH - gaps) / sumInv));
+    const column = ok.length > 1 && colW * colW * sumInv > rowH * rowH * sumA;   // a tie stays a row
+    const sizes = aspects.map(a => column ? [colW, colW / a] : [rowH * a, rowH]);
+    const groupW = column ? colW : rowH * sumA + gaps, groupH = column ? colW * sumInv + gaps : rowH;
+    let x = padX + (areaW - groupW) / 2, y = top + (areaH - groupH) / 2;
     ok.forEach((el, i) => {
       const [w, h] = sizes[i];
-      Object.assign(el.style, { visibility: 'visible', left: left + 'px', top: top + 'px', width: w + 'px', height: h + 'px' });
-      left += w + gap;
+      Object.assign(el.style, { visibility: 'visible', left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+      if (column) y += h + gap; else x += w + gap;
     });
   }
 
