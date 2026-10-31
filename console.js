@@ -73,7 +73,9 @@
   // <goto> carries it on; false from the start when launch goes straight to the <landing> program).
   // Templates: <gosub ref="label"> pastes that tagged program in place; its commands run inline.
   // <bottom-row> moves the write head (and cursor) to the left edge of the last visible row;
-  // <bottom-row delta=-1> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row delta=1>
+  // <bottom-row delta=-1> to the row above it (delta ≤ 0). Nothing is erased. <bottom-row fit>
+  // starts the text after it (up to the next <bottom-row>, <top-row> or <cls>) as many rows up as
+  // it wraps to, so its last row is the bottom row: a footer of any width. <bottom-row delta=1>
   // parks the cursor one row below the bottom row, out of the way (nothing should be typed after it).
   // <top-row> moves it to the left edge of the top row; <top-row delta=2> to 2 rows below it
   // (delta ≥ 0; the caller keeps it within the panel).
@@ -312,6 +314,9 @@
       if (ch === ROW_MARK) {                             // <bottom-row>, <top-row>
         wrap.flush();
         pen.x = 0; pen.line = attr.row ?? Math.max(0, bottomRow + attr.delta); parked = attr.delta > 0;
+        // <bottom-row fit>: up as many rows as its block wraps to (wrapCentred() wraps exactly as
+        // here from the start of a line; only its row count is used), so the block ends on the bottom row.
+        if (attr.text !== undefined) pen.line = Math.max(0, bottomRow - (centredRun(attr).rows - 1));
         continue;
       }
       if (ch === CENTER_MARK) {                          // <center>: each row of the run where it'll be centred
@@ -911,6 +916,12 @@
         ops.push({ text: m[13], freak: { hold: at.hold, fade: at.fade } });
       } else if (m[0].startsWith('<top-row')) {
         ops.push({ row: Math.max(0, Number(m[14] || 0)) });   // delta: 0 or positive
+      } else if (/^<bottom-row\s+fit\s*\/?>$/.test(m[0])) {
+        // <bottom-row fit>: the block it anchors runs to the next row tag or <cls>; like <center>,
+        // what's displayed of it (less <replace>'s erased old text) is what gets wrapped and counted.
+        const rest = text.slice(re.lastIndex), end = rest.search(/<(?:bottom-row|top-row)\b|<cls>/);
+        const inner = parse(end < 0 ? rest : rest.slice(0, end));
+        ops.push({ bottomRow: 0, fit: inner.filter(op => op.text !== undefined && !op.replaceOld).map(op => op.text).join('') });
       } else if (m[0].startsWith('<bottom-row')) {
         ops.push({ bottomRow: Math.min(1, Number(m[11] || 0)) });   // delta: ≤ 0, or 1 to park the cursor
       } else if (m[9] !== undefined) {
@@ -979,7 +990,7 @@
       if (op.cls) {
         clearScreen();
       } else if (op.bottomRow !== undefined) {
-        typeChar(ROW_MARK, { kind: 'row', delta: op.bottomRow });   // a directive, not typed: no wait
+        typeChar(ROW_MARK, { kind: 'row', delta: op.bottomRow, text: op.fit });   // a directive, not typed: no wait
       } else if (op.center !== undefined) {
         typeChar(CENTER_MARK, { kind: 'center', text: op.center });   // a directive: no wait
       } else if (op.video !== undefined) {
