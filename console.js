@@ -22,6 +22,8 @@
     grayTextColor: [128, 128, 128],     // <grey>: de-emphasised text
     highTextColor: [150, 255, 180],     // <high>: emphasised text (drawn bold, too)
     imageGap: 2,                // <image-embed> with several images: the gap between them, in character widths
+    captionGap: 0.5,            // embed + <center> caption with room to spare: rows between them (shrinks to 0 when tight)
+    imageWaitMs: 4000,          // <image-embed>: the text after it waits for the images to load, at most this long
     glow: false,                // bloom off for now (it showed a grid pattern on real GPUs)
     glowColor: [55, 127, 107],  // phosphor bloom is greener than the near-white cores it surrounds
     glowTight: [0.05, 0.35],    // [σ in cap heights, strength]: the halo hugging each glyph
@@ -87,15 +89,16 @@
   // <video-embed ref=YOUTUBE_ID t=SEC dur=SEC> (t optional: start offset in seconds; dur optional:
   // pause, holding the frame, that long after t): a 16:9 YouTube player (click to play, loops) in the text area from
   // the current row down to just above the bottom row; text after it goes on the bottom row (a
-  // <center> caption that wraps: on as many rows as it needs, ending there).
+  // <center> caption: see below).
   // Removed by the next clear.
   // <image-embed ref="files/image.png">: an image (site-relative path) in the same area, as large as
-  // fits, centred; text after it goes on the bottom row.
+  // fits, centred; text after it goes on the bottom row, once the images have loaded.
   // ref="files/a.png,files/b.jpg": two (or more) in a row or a column, whichever shows them larger.
   // Removed by the next clear; it and <video-embed> replace each other.
   // <center>text</center>: text centred horizontally; if it's longer than a line it wraps by word
   // and each row is centred (tags inside work as usual). Straight after an embed, it's a caption:
-  // its last row on the bottom row, the embed's area ending above its first.
+  // its last row on the bottom row and the embed above it, or, if the embed leaves room, the two
+  // as one block centred in the area, the caption just under the embed.
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
   // download instead, target="_blank" for a new tab).
   const PROGRAMS = [
@@ -284,7 +287,7 @@
     const pen = wrap.pen;
     const centred = new Map();                           // <center> attr → wrapCentred(), once per layout
     const centredRun = attr => centred.get(attr) || centred.set(attr, wrapCentred(attr.text, maxW)).get(attr);
-    let k = 0, media = null, mediaTop = 0, mediaEnd = bottomRow;
+    let k = 0, media = null, mediaTop = 0, mediaEnd = bottomRow, mediaBox = [0, 0];   // mediaBox: [top, height] to centre the media in
     let parked = false;            // after <bottom-row delta=1>, before any more text: the cursor's out of sight
     // A <center> run being placed: its next code points come from its table, not from wrap.
     let run = null, runText = [], runAt = 0, runX = 0, runLine = 0;
@@ -322,6 +325,17 @@
         // to, and the media area stops above its first; any other text starts on the bottom row.
         const caption = attrs[k] && attrs[k].kind === 'center' ? centredRun(attrs[k]) : null;
         mediaEnd = caption ? Math.max(Math.min(mediaTop, bottomRow), bottomRow - (caption.rows - 1)) : bottomRow;
+        mediaBox = [mediaTop * lineH, Math.max(0, mediaEnd - mediaTop) * lineH];
+        // Media narrower than its area leaves room: then media, captionGap and caption go together
+        // as one block centred in the area (the embed's row to the bottom row), the caption on the
+        // first row below the media and the media just above it. Media that fills the area's
+        // height leaves the caption on the bottom rows. Image sizes are known once they've loaded.
+        const fitH = caption && mediaHeight(attr, maxW, mediaBox[1]);
+        if (fitH) {
+          const g = CFG.captionGap * lineH, slack = (bottomRow + 1 - mediaTop) * lineH - fitH - g - caption.rows * lineH;
+          const row = mediaTop + Math.ceil((Math.max(0, slack / 2) + fitH + g) / lineH - 1e-6);
+          if (row < mediaEnd) { mediaEnd = row; mediaBox = [Math.max(mediaTop * lineH, row * lineH - g - fitH), fitH]; }
+        }
         pen.line = mediaEnd;
         continue;
       }
@@ -340,7 +354,7 @@
     const scroll = Math.max(0, ((parked ? bottomRow : line) + 1) * lineH - maxH);
     const base = l => padY + l * lineH + baseOff - scroll;
     glyphs = placed.map(([ch, gx, l, w, attr]) => [ch, padX + gx, base(l), w, attr]);
-    const mediaY = padY + mediaTop * lineH - scroll, mediaH = Math.max(0, mediaEnd - mediaTop) * lineH;
+    const mediaY = padY + mediaBox[0] - scroll, mediaH = mediaBox[1];
     placeVideo(media && media.kind === 'video' ? media : null, mediaY, mediaH);   // the last embed wins; the other goes
     placeImage(media && media.kind === 'image' ? media : null, mediaY, mediaH);
     cursor = { x: padX + cx, y: base(line) - (1 + CURSOR.above) * cap, w: cw, h: CURSOR.h * cap };
@@ -415,6 +429,7 @@
   // the area both ways. Hidden until they've all loaded or failed (sizes aren't known before; a
   // failed one drops out). Goes with the screen, too.
   let imageEls = [];
+  const imageAspects = new Map();   // src → width / height once loaded, 0 if it failed: layout() sizes captions by it
   function placeImage(attr, top, areaH) {
     const srcs = attr ? attr.srcs : [];
     while (imageEls.length > srcs.length) imageEls.pop().remove();
@@ -423,33 +438,47 @@
       el.className = 'image';
       el.alt = '';
       el.draggable = false;
-      el.addEventListener('load', () => { dirty = true; });   // now it has a size: lay out again
-      el.addEventListener('error', () => { dirty = true; console.warn(`console: <image-embed> couldn't load ${el.getAttribute('src')}`); });
+      el.addEventListener('load', () => { imageAspects.set(el.getAttribute('src'), el.naturalWidth / el.naturalHeight || 0); dirty = true; });   // now it has a size: lay out again
+      el.addEventListener('error', () => { imageAspects.set(el.getAttribute('src'), 0); dirty = true; console.warn(`console: <image-embed> couldn't load ${el.getAttribute('src')}`); });
       panel.appendChild(el);
       imageEls.push(el);
     }
     imageEls.forEach((el, i) => { if (el.getAttribute('src') !== srcs[i]) el.src = srcs[i]; });   // only on change: re-layout mustn't reload
     const hide = el => { el.style.visibility = 'hidden'; };
-    if (!imageEls.every(el => el.complete)) { imageEls.forEach(hide); return; }   // complete: loaded or failed
-    const ok = imageEls.filter(el => el.naturalWidth && el.naturalHeight);
+    const aspects = srcs.map(src => imageAspects.get(src));
+    if (aspects.includes(undefined)) { imageEls.forEach(hide); return; }   // not all loaded (or failed) yet
+    const ok = imageEls.filter((el, i) => aspects[i] > 0);
     imageEls.forEach(el => { if (!ok.includes(el)) hide(el); });
     if (!ok.length) return;
-    const areaW = boxW - 2 * padX, gap = CFG.imageGap * charWidth(' '), gaps = (ok.length - 1) * gap;
-    const aspects = ok.map(el => el.naturalWidth / el.naturalHeight);
-    // A row of height h is h·Σaspect + gaps wide; a column of width w is w·Σ(1/aspect) + gaps tall.
-    // Each is as large as fits; the images' total area is then h²·Σaspect or w²·Σ(1/aspect).
+    const areaW = boxW - 2 * padX, fit = fitImages(aspects.filter(a => a > 0), areaW, areaH);
+    let x = padX + (areaW - fit.w) / 2, y = top + (areaH - fit.h) / 2;
+    ok.forEach((el, i) => {
+      const [w, h] = fit.sizes[i];
+      Object.assign(el.style, { visibility: 'visible', left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
+      if (fit.column) y += h + fit.gap; else x += w + fit.gap;
+    });
+  }
+
+  // Images with these aspect ratios (width / height) as large as they fit areaW × areaH, as a row
+  // or a column. A row of height h is h·Σaspect + gaps wide; a column of width w is w·Σ(1/aspect)
+  // + gaps tall. Each is as large as fits; the images' total area is then h²·Σaspect or
+  // w²·Σ(1/aspect). → { sizes: [[w, h]], column, gap, w, h: the group's }
+  function fitImages(aspects, areaW, areaH) {
+    const gap = CFG.imageGap * charWidth(' '), gaps = (aspects.length - 1) * gap;
     const sumA = aspects.reduce((s, a) => s + a, 0), sumInv = aspects.reduce((s, a) => s + 1 / a, 0);
     const rowH = Math.max(0, Math.min(areaH, (areaW - gaps) / sumA));
     const colW = Math.max(0, Math.min(areaW, (areaH - gaps) / sumInv));
-    const column = ok.length > 1 && colW * colW * sumInv > rowH * rowH * sumA;   // a tie stays a row
-    const sizes = aspects.map(a => column ? [colW, colW / a] : [rowH * a, rowH]);
-    const groupW = column ? colW : rowH * sumA + gaps, groupH = column ? colW * sumInv + gaps : rowH;
-    let x = padX + (areaW - groupW) / 2, y = top + (areaH - groupH) / 2;
-    ok.forEach((el, i) => {
-      const [w, h] = sizes[i];
-      Object.assign(el.style, { visibility: 'visible', left: x + 'px', top: y + 'px', width: w + 'px', height: h + 'px' });
-      if (column) y += h + gap; else x += w + gap;
-    });
+    const column = aspects.length > 1 && colW * colW * sumInv > rowH * rowH * sumA;   // a tie stays a row
+    return { column, gap, sizes: aspects.map(a => column ? [colW, colW / a] : [rowH * a, rowH]),
+             w: column ? colW : rowH * sumA + gaps, h: column ? colW * sumInv + gaps : rowH };
+  }
+
+  // The height an embed takes in an area areaW × areaH; 0 for images not all loaded yet (or none that did).
+  function mediaHeight(attr, areaW, areaH) {
+    if (attr.kind === 'video') return Math.min(areaW, areaH * 16 / 9) * 9 / 16;
+    const aspects = attr.srcs.map(src => imageAspects.get(src));
+    if (aspects.includes(undefined) || !aspects.some(a => a > 0)) return 0;
+    return fitImages(aspects.filter(a => a > 0), areaW, areaH).h;
   }
 
 
@@ -944,6 +973,9 @@
         typeChar(MEDIA_MARK, { kind: 'video', id: op.video, start: op.start, dur: op.dur });   // a directive: no wait
       } else if (op.images) {
         typeChar(MEDIA_MARK, { kind: 'image', srcs: op.images });
+        // Hold what follows until the images have loaded (or failed): a caption typed before then
+        // would start on the bottom rows and jump up under them once their size is known.
+        if (!skip) for (let t = 0; t < CFG.imageWaitMs && op.images.some(src => !imageAspects.has(src)); t += 50) await wait(50, g);
       } else if (op.row !== undefined) {
         typeChar(ROW_MARK, { kind: 'row', row: op.row });
       } else if (op.rain !== undefined) {
