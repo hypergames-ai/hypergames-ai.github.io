@@ -37,7 +37,7 @@ second. In a landscape window the column count is constant, so shrinking the win
 same picture, smaller.
 
 The console's font and the panel's padding are the exception in windows wider than 16:9: there they
-follow the height instead (as if the window were 16:9), so the panel always fits the same 15 rows
+follow the height instead (as if the window were 16:9), so the panel always fits the same 19 rows
 it shows at 1920×1080 and a shorter window shrinks the text rather than losing rows. Narrower and
 portrait windows show more rows.
 
@@ -61,7 +61,7 @@ video sizes itself to the space left. When that leaves room (a single picture in
 media and caption go together as one block centred in the area, the caption just under the media.
 The text after an image waits until the image has loaded, so its caption doesn't jump. Every resize lays the text out afresh.
 
-The panel is `75vw × 50vh` (`50dvh` where supported), defined only in `style.css`. `rain.js`
+The panel is `75vw × 60vh` (`60dvh` where supported), defined only in `style.css`. `rain.js`
 reads its geometry from the DOM on every resize, so changing the panel's CSS keeps the splashes
 aligned.
 

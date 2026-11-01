@@ -45,7 +45,7 @@ html, body {
   position: fixed; left: 50%; top: 50%;
   z-index: 1;
   width: 75vw;
-  height: 50vh; height: 50dvh;                         /* dvh where supported (mobile URL bar) */
+  height: 60vh; height: 60dvh;                         /* dvh where supported (mobile URL bar) */
   transform: translate(-50%, -50%);
   box-sizing: border-box;
   background: #000;
