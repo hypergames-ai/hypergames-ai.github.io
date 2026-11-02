@@ -114,6 +114,8 @@ its text one character at a time (`CFG.charMs`, default 16 ms, ±50% jitter). Pr
 | `<goto ref="label">` (very last characters, instead of `<stop>`) | When the program finishes, jumps to the program tagged *label* like a one-way link: nav stack cleared, the target becomes the base page and the sequence carries on from it. Doesn't fire if the program is cut short; a missing tag stops like `<stop>`; ignored inside `<gosub>` templates |
 | `<stop make-cookie>` (very last characters) | Same, and sets the returning-visitor flag when the program finishes (any completed render, however it was reached) |
 | `<landing>` (very first characters, before any `<tag>`) | Marks the landing program for returning visitors. Not displayed; even a leading space disables it |
+| `<set-bookmark page=N>` | Raises the bookmark to *N* (quotes optional). It only goes up: if *N* is less than or equal to the stored bookmark, nothing happens. See **Bookmark** below |
+| `<prog ref="label" bmpage=N>`, `<a href="…" bmpage=N>` | Gates the link on the bookmark (quotes optional; combines with the other attributes in any order). *N* above the bookmark: plain grey text, no link; *N* equal to it: a normal link (the next section); *N* below: still a link, in dark green (`CFG.doneLinkColor`) and not bold. A bookmark of `CFG.bookmarkAll` (100) or more opens every such link, bright. Without `bmpage`, a link is unaffected |
 | `<delete-cookie>` | Clears the returning-visitor flag at that point in the program, and turns `<in-startup>` back on: the programs that start after it see the startup sequence as on again, until it ends as usual |
 | `<have-cookie>yes<else>no</have-cookie>` | Branches on the returning-visitor flag. When the program starts, before anything else, the block is replaced by *yes* (flag set) or *no* (not set), exactly as written (spaces included), and that text then runs like any other program text: links, `<delay>`, `<gosub>`, even the program's closing `<stop>`, `<stop make-cookie>` or `<goto>`. `<else>` is required (a block without exactly one expands to nothing, with a console warning); either branch may be empty; blocks nest. Evaluated once per run, so a `<delete-cookie>` earlier in the same program doesn't change it (a BACK re-render evaluates it again). Keep `<landing>` and `<tag>` outside it. Templates' blocks resolve the same way |
 | `<in-startup>yes<else>no</in-startup>` | Same rules as `<have-cookie>`, branching on whether the startup sequence is still on: true from launch until the sequence ends (a program ending in `<stop>`/`<stop make-cookie>` completes, or the programs run out; a `<goto>` or one-way link carries it on, and pages linked from it still count as in it). False from the start when launch goes straight to the `<landing>` program, and false once the sequence has ended, until a `<delete-cookie>` turns it back on. The two kinds nest inside each other |
@@ -142,7 +144,7 @@ with the cursor. A two-level bloom (tight halo plus wide haze) is built in but o
 halfway between the film's pale mint and the rain's green. The cursor is a block about 1.75
 characters wide: steady while typing; when idle it beats every 900 ms — on for 300 ms, fading out
 over 200 ms, then dark for 400 ms. It stays steady under `prefers-reduced-motion`. Without WebGL it falls back to a 2D
-canvas. Tuning (`charMs`, `slowCharMs`, `fontVmax`, colours, `imageGap`, `captionGap`, `imageWaitMs`, `glow`, `glowTight`/`glowWide`, `holdMs`, `fadeMs`,
+canvas. Tuning (`charMs`, `slowCharMs`, `fontVmax`, colours (including `doneLinkColor`), `bookmarkDefault`, `bookmarkAll`, `imageGap`, `captionGap`, `imageWaitMs`, `glow`, `glowTight`/`glowWide`, `holdMs`, `fadeMs`,
 `beatMs`, and for `<freakout>`: `freakShake` (max jiggle, em), `freakBlur` (max blur σ, em),
 `freakCurve` (ramp steepness), `freakHz` (jiggle rate), `freakFadeOut` (fraction of `fade` spent fading out)) is in `CFG` at the top of `console.js`; call `MatrixConsole.refresh()` after changing it
 at runtime.
@@ -179,6 +181,15 @@ with the flag, the `<landing>` program runs first (as the base page). Either way
 only when a program runs `<start-rain>` — put one at the top of the landing program to have rain
 straight away for returning visitors. Clearing the site's data resets it.
 
+**Bookmark:** a number in `localStorage` (key `bookmark`; `CFG.bookmarkDefault`, 2, until one is
+stored) that walks visitors through the sections in order while letting them review finished ones
+in any order. Give each menu link `bmpage=N` for its section, and end each section's last page
+with `<set-bookmark page=N+1>` before its MAIN MENU link: the menu then shows the sections done in
+dark green, the next one bright, and the rest as grey text that isn't a link yet. The bookmark only
+goes up, so revisiting an earlier section doesn't lower it; `<delete-cookie>` leaves it alone.
+`<set-bookmark page=100>` (`CFG.bookmarkAll`) opens everything. Each link checks the bookmark as
+it's typed, so a `<set-bookmark>` affects links after it, from the same program on.
+
 `<in-startup>` tells a first run through the startup sequence apart from everything after it: a
 program that's both part of the sequence and the landing's `<goto>` target can tell which way the
 visitor came in.
@@ -208,6 +219,7 @@ MatrixConsole.navigate('about', { oneWay: true });  // as a one-way link: no < B
 MatrixConsole.navigate('about', { noStack: true }); // as a no-stack link: replaces the current page
 MatrixConsole.back();                    // same as clicking < BACK; MatrixConsole.navDepth = stack depth
 MatrixConsole.makeCookie(); MatrixConsole.hasCookie(); MatrixConsole.deleteCookie();  // the returning-visitor flag
+MatrixConsole.getBookmark(); MatrixConsole.setBookmark(3);  // the bookmark (setBookmark only raises it); localStorage.removeItem('bookmark') resets it
 MatrixConsole.noDisplayDelay = true;     // next program appears at once: no delays or replace effect (one-shot)
 ```
 

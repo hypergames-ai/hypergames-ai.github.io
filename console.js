@@ -23,6 +23,9 @@
     textColor: [68, 232, 127],
     cursorColor: [99, 237, 139],
     brokenLinkColor: [128, 128, 128],   // <prog> links whose tag doesn't exist
+    doneLinkColor: [34, 150, 80],       // bmpage links to sections before the bookmark (darker green)
+    bookmarkDefault: 2,         // the bookmark when none is stored
+    bookmarkAll: 100,           // a bookmark this high opens every bmpage link, all bright
     grayTextColor: [128, 128, 128],     // <grey>: de-emphasised text
     highTextColor: [150, 255, 180],     // <high>: emphasised text (drawn bold, too)
     imageGap: 2,                // <image-embed> with several images: the gap between them, in character widths
@@ -65,6 +68,11 @@
   // first; otherwise the flag is cleared and the program tagged start (<tag>start</tag>) runs, or
   // program 0 if none is. Unrecognised tags render as nothing. <stop> as the very last
   // characters ends the startup sequence after that program.
+  // Bookmark: a number in localStorage (CFG.bookmarkDefault until set) that unlocks sections in
+  // order. <set-bookmark page=N> raises it to N; it never goes down (N ≤ the bookmark is a no-op).
+  // bmpage=Y on a link (<prog ref="…" bmpage=Y>, <a href="…" bmpage=Y>, quotes optional) gates it:
+  // Y above the bookmark: plain grey text, no link; Y equal: a normal link (bright, the next
+  // section); Y below: a link in dark green (done). A bookmark ≥ CFG.bookmarkAll opens them all, bright.
   // <have-cookie>yes<else>no</have-cookie>: when the program starts, the branch for the flag's
   // state replaces the block verbatim and is then run as usual (<else> required; either branch may
   // be empty; blocks nest; a branch may hold the closing <stop> or <goto>). Keep <landing> and
@@ -569,7 +577,7 @@
     let animating = false;
     for (const [ch, x, y, w, attr] of glyphs) {
       ctx.fillStyle = css(attr && attr.kind === 'broken' ? CFG.brokenLinkColor : attr && attr.gray ? CFG.grayTextColor
-        : attr && attr.high ? CFG.highTextColor : CFG.textColor);
+        : attr && attr.done ? CFG.doneLinkColor : attr && attr.high ? CFG.highTextColor : CFG.textColor);
       if (Boolean(attr && attr.high) !== bold) { bold = !bold; ctx.font = `${bold ? 'bold ' : ''}${fontPx}px ${FONT_STACK}`; }
       if (attr && attr.kind === 'freak') {
         let f = freaks.get(attr);
@@ -883,7 +891,7 @@
   // A linked page (back = its label, "< BACK" or "< MENU") gets that typed line after every clear.
   function parse(text, back = '') {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack|bmpage\s*=\s*"?\d+"?))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -891,6 +899,10 @@
       if (m[1] !== undefined) ops.push({ delay: Number(m[1]) });
       else if (m[0] === '<cls>') ops.push({ cls: true });
       else if (/^<delete-cookie\s*\/?>$/.test(m[0])) ops.push({ deleteCookie: true });
+      else if (/^<set-bookmark\b/.test(m[0])) {
+        const n = /\bpage\s*=\s*"?(\d+)"?/.exec(m[0]);     // <set-bookmark page=N>: no valid N drops the tag
+        if (n) ops.push({ setBookmark: Number(n[1]) });
+      }
       else if (/^<(start|stop)-rain\s*\/?>$/.test(m[0])) ops.push({ rain: m[0].startsWith('<start') });
       else if (/^<center\s*>$/.test(m[0])) {
         // Centre on what ends up displayed up to </center>: its text ops, less <replace>'s erased
@@ -920,7 +932,10 @@
       else if (/^<(slow|normal)-spew\s*\/?>$/.test(m[0])) ops.push({ slow: m[0].startsWith('<slow') });
       else if (/^<\/?grey\s*>$/.test(m[0])) ops.push({ gray: !m[0].startsWith('</') });
       else if (/^<\/?high\s*>$/.test(m[0])) ops.push({ high: !m[0].startsWith('</') });
-      else if (m[6] !== undefined) ops.push({ text: m[8], link: m[6], oneWay: /one-way/.test(m[7]), noStack: /no-stack/.test(m[7]) });
+      else if (m[6] !== undefined) {
+        const bm = /bmpage\s*=\s*"?(\d+)/.exec(m[7]);
+        ops.push({ text: m[8], link: m[6], oneWay: /one-way/.test(m[7]), noStack: /no-stack/.test(m[7]), bmpage: bm ? Number(bm[1]) : undefined });
+      }
       else if (m[3] !== undefined) {
         // <replace>: old and new are plain text (tags stripped), so the backspace count is exact.
         // The <replace> hold runs before backspacing; the <with> hold after it, before new is typed.
@@ -946,11 +961,12 @@
       } else if (m[0].startsWith('<bottom-row')) {
         ops.push({ bottomRow: Math.min(1, Number(m[11] || 0)) });   // delta: ≤ 0, or 1 to park the cursor
       } else if (m[9] !== undefined) {
-        // <a href="…" download? target?>text</a>: a web link; without an href it's plain text.
+        // <a href="…" download? target? bmpage?>text</a>: a web link; without an href it's plain text.
         const at = {};
-        for (const [, k, val] of m[9].matchAll(/([a-z][\w-]*)(?:\s*=\s*"([^"]*)")?/gi)) at[k.toLowerCase()] = val ?? '';
+        for (const [, k, q, bare] of m[9].matchAll(/([a-z][\w-]*)(?:\s*=\s*(?:"([^"]*)"|([^\s"]+)))?/gi)) at[k.toLowerCase()] = q ?? bare ?? '';
+        const bmpage = /^\d+$/.test(at.bmpage ?? '') ? Number(at.bmpage) : undefined;
         ops.push(at.href !== undefined
-          ? { text: m[10], href: at.href, download: at.download, newTab: at.target === '_blank' }
+          ? { text: m[10], href: at.href, download: at.download, newTab: at.target === '_blank', bmpage }
           : { text: m[10] });
       }
       // else: an unrecognised tag, dropped
@@ -966,6 +982,25 @@
   function makeCookie() { try { localStorage.setItem(COOKIE_KEY, '1'); } catch (e) { /* storage blocked */ } }
   function deleteCookie() { try { localStorage.removeItem(COOKIE_KEY); } catch (e) { /* storage blocked */ } }
   function hasCookie() { try { return localStorage.getItem(COOKIE_KEY) !== null; } catch (e) { return false; } }
+
+  // The bookmark: a number in localStorage that only goes up. Missing, unreadable or blocked reads
+  // as CFG.bookmarkDefault; blocked storage ignores writes.
+  const BOOKMARK_KEY = 'bookmark';
+  function getBookmark() {
+    let n = NaN;
+    try { n = parseInt(localStorage.getItem(BOOKMARK_KEY), 10); } catch (e) { /* storage blocked */ }
+    return Number.isFinite(n) ? n : CFG.bookmarkDefault;
+  }
+  function setBookmark(n) {
+    if (!(n > getBookmark())) return;                    // never lower it
+    try { localStorage.setItem(BOOKMARK_KEY, String(n)); } catch (e) { /* storage blocked */ }
+  }
+  // A link with bmpage=y, against the bookmark now: 'locked' (above it: no link), 'done' (below:
+  // dark green) or 'open' (the next section, or every section once the bookmark is bookmarkAll).
+  function bookmarkState(y) {
+    const x = getBookmark();
+    return x >= CFG.bookmarkAll || y === x ? 'open' : y > x ? 'locked' : 'done';
+  }
 
   // stop() and run() bump `gen`; a program from an older generation bails out at its next wait.
   let gen = 0, running = false, next = 0;
@@ -1032,6 +1067,8 @@
       } else if (op.deleteCookie) {
         deleteCookie();
         inStartup = true;         // a first visit again, so the startup sequence is on again
+      } else if (op.setBookmark !== undefined) {
+        setBookmark(op.setBookmark);
       } else if (op.slow !== undefined) {
         charMs = op.slow ? CFG.slowCharMs : CFG.charMs;
       } else if (op.gray !== undefined) {
@@ -1051,14 +1088,18 @@
         setTyping(false);
       } else {
         // One link object per occurrence, shared by its characters (hover highlights just this one).
+        // A bmpage link past the bookmark is no link at all, just grey text.
+        const bm = op.bmpage !== undefined ? bookmarkState(op.bmpage) : 'open';
         let attr = op.back ? { kind: 'back' }
+          : bm === 'locked' ? null
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
-        if (gray && !op.back) {                           // < BACK after a <cls> stays green
+        if (attr && bm === 'done') attr.done = true;
+        if ((gray || bm === 'locked') && !op.back) {      // < BACK after a <cls> stays green
           if (attr) attr.gray = true; else attr = GRAY;
         }
-        const linkHigh = attr && (attr.kind === 'prog' || attr.kind === 'url') && !gray;   // links are <high>, unless in <grey>
+        const linkHigh = attr && (attr.kind === 'prog' || attr.kind === 'url') && !gray && !attr.done;   // links are <high>, unless in <grey> or done
         if ((high || linkHigh) && !op.back) {
           if (attr) attr.high = true; else attr = HIGH;
         }
@@ -1292,7 +1333,7 @@
   Promise.all([document.fonts.load("16px 'Courier Prime'"), document.fonts.load("bold 16px 'Courier Prime'")]).then(refresh);
 
   window.MatrixConsole = {
-    start, stop, run, refresh, navigate, back, makeCookie, hasCookie, deleteCookie, programs: PROGRAMS, CFG,
+    start, stop, run, refresh, navigate, back, makeCookie, hasCookie, deleteCookie, getBookmark, setBookmark, programs: PROGRAMS, CFG,
     get navDepth() { return navStack.length; },
     get inStartup() { return inStartup; },
     get noDisplayDelay() { return noDisplayDelay; },
