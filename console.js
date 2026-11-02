@@ -23,7 +23,6 @@
     textColor: [68, 232, 127],
     cursorColor: [99, 237, 139],
     brokenLinkColor: [128, 128, 128],   // <prog> links whose tag doesn't exist
-    doneLinkColor: [34, 150, 80],       // bmpage links to sections before the bookmark (darker green)
     bookmarkDefault: 2,         // the bookmark when none is stored
     bookmarkAll: 100,           // a bookmark this high opens every bmpage link, all bright
     grayTextColor: [128, 128, 128],     // <grey>: de-emphasised text
@@ -72,7 +71,7 @@
   // order. <set-bookmark page=N> raises it to N; it never goes down (N ≤ the bookmark is a no-op).
   // bmpage=Y on a link (<prog ref="…" bmpage=Y>, <a href="…" bmpage=Y>, quotes optional) gates it:
   // Y above the bookmark: plain grey text, no link; Y equal: a normal link (bright, the next
-  // section); Y below: a link in dark green (done). A bookmark ≥ CFG.bookmarkAll opens them all, bright.
+  // section); Y below: a link in the same light green, not bold (done). A bookmark ≥ CFG.bookmarkAll opens them all, bright.
   // <have-cookie>yes<else>no</have-cookie>: when the program starts, the branch for the flag's
   // state replaces the block verbatim and is then run as usual (<else> required; either branch may
   // be empty; blocks nest; a branch may hold the closing <stop> or <goto>). Keep <landing> and
@@ -577,7 +576,7 @@
     let animating = false;
     for (const [ch, x, y, w, attr] of glyphs) {
       ctx.fillStyle = css(attr && attr.kind === 'broken' ? CFG.brokenLinkColor : attr && attr.gray ? CFG.grayTextColor
-        : attr && attr.done ? CFG.doneLinkColor : attr && attr.high ? CFG.highTextColor : CFG.textColor);
+        : attr && (attr.done || attr.high) ? CFG.highTextColor : CFG.textColor);
       if (Boolean(attr && attr.high) !== bold) { bold = !bold; ctx.font = `${bold ? 'bold ' : ''}${fontPx}px ${FONT_STACK}`; }
       if (attr && attr.kind === 'freak') {
         let f = freaks.get(attr);
@@ -996,7 +995,7 @@
     try { localStorage.setItem(BOOKMARK_KEY, String(n)); } catch (e) { /* storage blocked */ }
   }
   // A link with bmpage=y, against the bookmark now: 'locked' (above it: no link), 'done' (below:
-  // dark green) or 'open' (the next section, or every section once the bookmark is bookmarkAll).
+  // light green, not bold) or 'open' (the next section, or every section once the bookmark is bookmarkAll).
   function bookmarkState(y) {
     const x = getBookmark();
     return x >= CFG.bookmarkAll || y === x ? 'open' : y > x ? 'locked' : 'done';
