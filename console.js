@@ -60,7 +60,8 @@
   // BACK: the linked program becomes the base page and the nav stack starts over from it.
   // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
   // stacking on it, so BACK skips it, and its BACK reads "< MENU"; on the base page it acts as
-  // one-way (no BACK).
+  // one-way (no BACK). <prog ref=back>text</prog> is a link that works exactly like < BACK, drawn
+  // as a normal link (back is reserved, never a tag). The ref's quotes are optional.
   // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie> clears it (and starts the startup sequence over for <in-startup>). At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
@@ -584,7 +585,7 @@
         continue;
       }
       ctx.fillText(ch, x, y);
-      if (isLink(attr) && (attr.kind !== 'back' || attr === hoverLink)) ctx.fillRect(x, y + ulOff, w, ulH);
+      if (isLink(attr) && (attr.kind !== 'back' || attr.inline || attr === hoverLink)) ctx.fillRect(x, y + ulOff, w, ulH);
     }
     return animating;
   }
@@ -886,7 +887,7 @@
   // A linked page (back = its label, "< BACK" or "< MENU") gets that typed line after every clear.
   function parse(text, back = '') {
     const ops = [{ cls: true }];
-    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref="([^"]*)"((?:\s+(?:one-way|no-stack|bmpage\s*=\s*"?\d+"?))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
+    const re = new RegExp(/<delay>(\d+)ms<\/delay>|<cls>|<replace(?:\s+hold="(\d+)ms")?>([\s\S]*?)<with(?:\s+hold="(\d+)ms")?>([\s\S]*?)<\/replace>|<prog ref\s*=\s*"?([^"\s>]*)"?((?:\s+(?:one-way|no-stack|bmpage\s*=\s*"?\d+"?))*)\s*>([^<]*)<\/prog>|<a\s+([^<>]*)>([^<]*)<\/a>|<bottom-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>|<freakout\b([^<>]*)>([^<]*)<\/freakout>|<top-row(?:\s+delta\s*=\s*"?(-?\d+)"?)?\s*\/?>/.source
                         + '|' + UNKNOWN_TAG, 'g');
     let last = 0, m;
     while ((m = re.exec(text))) {
@@ -1087,6 +1088,7 @@
         const bm = op.bmpage !== undefined ? bookmarkState(op.bmpage) : 'open';
         let attr = op.back ? { kind: 'back' }
           : bm === 'locked' ? null
+          : op.link === 'back' ? { kind: 'back', inline: true }       // <prog ref=back>: < BACK, styled as a link
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
@@ -1094,7 +1096,7 @@
         if ((gray || bm === 'locked') && !op.back) {      // < BACK after a <cls> stays green
           if (attr) attr.gray = true; else attr = GRAY;
         }
-        const linkHigh = attr && (attr.kind === 'prog' || attr.kind === 'url') && !gray && !attr.done;   // links are <high>, unless in <grey> or done
+        const linkHigh = attr && (attr.kind === 'prog' || attr.kind === 'url' || attr.inline) && !gray && !attr.done;   // links are <high>, unless in <grey> or done
         if ((high || linkHigh) && !op.back) {
           if (attr) attr.high = true; else attr = HIGH;
         }
