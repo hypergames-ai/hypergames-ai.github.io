@@ -61,7 +61,8 @@
   // <prog ref="label" no-stack> (on a page that has a BACK) replaces the current page rather than
   // stacking on it, so BACK skips it, and its BACK reads "< MENU"; on the base page it acts as
   // one-way (no BACK). <prog ref=back>text</prog> is a link that works exactly like < BACK, drawn
-  // as a normal link (back is reserved, never a tag). The ref's quotes are optional.
+  // as a normal link (back is reserved, never a tag). <prog ref=next>text</prog> links to the program
+  // right after this one in PROGRAMS (next is reserved too). The ref's quotes are optional.
   // Returning visitors: <stop make-cookie> sets a presence flag (the "cookie") when its program
   // finishes; <delete-cookie> clears it (and starts the startup sequence over for <in-startup>). At launch, if exactly one program starts with <landing>
   // (the very first characters) and the flag is set, the rain starts at once and that program runs
@@ -1089,6 +1090,8 @@
         let attr = op.back ? { kind: 'back' }
           : bm === 'locked' ? null
           : op.link === 'back' ? { kind: 'back', inline: true }       // <prog ref=back>: < BACK, styled as a link
+          : op.link === 'next' ? (pageIndex + 1 < PROGRAMS.length      // <prog ref=next>: the program after this one
+            ? { kind: 'prog', index: pageIndex + 1, oneWay: op.oneWay, noStack: op.noStack } : { kind: 'broken', ref: 'next' })
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
@@ -1233,8 +1236,8 @@
   // A no-stack link replaces the current page instead of stacking on it, so BACK skips that page;
   // replacing the base page makes the target the new base page, which is just a one-way link.
   // A page reached by a no-stack link labels its BACK "< MENU" (it skips the pages in between).
-  function navigate(label, { oneWay = false, noStack = false } = {}) {
-    const i = taggedIndex(label);
+  function navigate(label, opts) { goTo(taggedIndex(label), opts); }
+  function goTo(i, { oneWay = false, noStack = false } = {}) {
     if (i < 0) return;                                    // broken link: no-op
     if (oneWay || (noStack && !navStack.length)) { run(i); return; }
     if (!noStack) navStack.push({ i: pageIndex, back: pageBack });
@@ -1287,7 +1290,7 @@
   canvas.addEventListener('pointerleave', () => setHover(null));
   canvas.addEventListener('click', e => {
     const link = linkAt(e);
-    if (link && link.kind === 'prog') navigate(link.ref, { oneWay: link.oneWay, noStack: link.noStack });
+    if (link && link.kind === 'prog') goTo(link.index ?? taggedIndex(link.ref), { oneWay: link.oneWay, noStack: link.noStack });
     else if (link && link.kind === 'back') back();
     else if (link && link.kind === 'url') followUrl(link, e.ctrlKey || e.metaKey);
   });
