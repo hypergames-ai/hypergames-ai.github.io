@@ -5,7 +5,7 @@
   'use strict';
 
   const CFG = {
-    charMs: 4,                 // mean gap between typed characters
+    charMs: 0,//4,                 // mean gap between typed characters
     slowCharMs: 60,             // the gap after <slow-spew> (<normal-spew> returns to charMs)
     jitter: 0.5,                // ± fraction of charMs, so typing doesn't tick like a metronome
     eraseMinMs: 30,            // <replace>: gap between backspace pecks, random in [min, max]
@@ -117,7 +117,10 @@
   // its last row on the bottom row and the embed above it, or, if the embed leaves room, the two
   // as one block centred in the area, the caption just under the embed.
   // Web links: <a href="…">text</a> (relative or absolute; add download or download="name" to
-  // download instead, target="_blank" for a new tab).
+  // download instead — another origin's file is fetched, so it needs CORS — target="_blank" for
+  // a new tab). <a transcript="name.txt">text</a> (download
+  // optional) downloads a plaintext transcript of the welcome screen and its sections
+  // (transcriptText) as name.txt.
   const PROGRAMS = [
     '<tag>hardstart</tag><delete-cookie>',
     '<tag>start</tag><cls><delay>2200ms</delay>',
@@ -182,13 +185,13 @@
     '<tag>p6s1</tag><high>Hypergames: Tools To Update Cultural Lenses</high>\n\nCivilization is hyperreal: it doesn\'t exist, but it feels like it does. Every "real" human construct (nations, careers, money, laws) was a dream reified by hyperreality simulation. <high>It\'s all made up!</high>\n\nIf it\'s all made up, can\'t we just stop simulating broken, outdated hyperrealities and simulate better ones? Yes, this is how things change. But there\'s a problem: <high>hyperreality simulation works. It installs beliefs.</high> And strongly held beliefs are slow to change. Moreover, collective beliefs are our cultural lens, our shared identity, our "reality". We can\'t change cultural beliefs by ourselves: the only way to get there is together.\n\nThis is where hypergames enter: contests built to <high>update cultural lenses</high>. Each contest nudges a belief system forward. With enough nudges, reality shifts. To understand how, let\'s start with the neuroscience of collective beliefs...\n\n<prog ref=next>CONTINUE</prog>',
 
     // P7: Tulpas
-    '<tag>p7s1</tag><image-embed ref="images/oracle_tulpa.jpeg"><center>The Orcale was not a jacked-in human. She was an AI <high>program</high>, a hyperreal human.</center>\n<center>In the DCR, the Oracle would be called a <high>tulpa</high>.  <prog ref=next>CONTINUE</prog></center>',
+    '<tag>p7s1</tag><set-bookmark page=100><image-embed ref="images/oracle_tulpa.jpeg"><center>The Orcale was not a jacked-in human. She was an AI <high>program</high>, a hyperreal human.</center>\n<center>In the DCR, the Oracle would be called a <high>tulpa</high>.  <prog ref=next>CONTINUE</prog></center>',
     '<tag>p7s2</tag><set-bookmark page=7>\n\n hs\n\n<prog ref="welcome" one-way>CONTINUE</prog>',
 
     // P8: The Red Pill
-    '<tag>p8s1</tag><set-bookmark page=100><high>The Red Pill</high>\n\nThank you for slogging through this site. The site could only provide a quick overview, but we\'ve put together a PDF document with a lot more details.\n\n<a href="https://hypergames.ai/RedPillWhitepaper.pdf" download>Download the Red Pill Whitepaper</a><stop>',
+    '<tag>p8s1</tag><set-bookmark page=100><high>The Red Pill</high><image-embed ref="images/hand.jpeg"><center>Thank you for slogging through this site (<a transcript="hypergames_site_transcript.txt" download>transcript</a>, <a href="https://github.com/hypergames-ai/hypergames-ai.github.io">source code</a>). This site is an overview, for detailed core concepts behind authoring consenus reality (⚠️ red pills):</center>\n<center><a href="https://hypergames.ai/RedPillWhitepaper.pdf" download>Download the Red Pill Whitepaper</a></center><stop>',
 
-    '<tag>footer</tag><bottom-row fit>Red Pills:\n<a href="https://hypergames.ai/RedPillWhitepaper.pdf" download>Download the Whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">Fun GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog><bottom-row delta=1>',
+    '<tag>footer</tag><bottom-row fit>Red Pills:\n<a href="https://hypergames.ai/RedPillWhitepaper.pdf" download>Download the Whitepaper</a> | <a href="https://x.com/mm_hypergames">Follow me on 𝕏</a> | <a href="https://github.com/hypergames-ai">GitHub Projects</a> | <prog ref="morpheus_red_pill" one-way>Give Agent Morpheus a Red Pill</prog><bottom-row delta=1>',
     '<tag>morpheus_red_pill</tag><cls><stop-rain><delay>3000ms</delay>Agent Morpheus: "You call this a choice?"\n<delay>2000ms</delay>\nYou: "The choice is an illusion. You already know what you have to do."\n<delay>2000ms</delay>\nAgent Morpheus: "Truth."<delay>800ms</delay> (selects Red Pill and swallows it)<start-rain>\n\n<delay>2000ms</delay>Agent Morpheus: <freakout hold=800ms fade=3000ms>"Whoa, what’s happening????"</freakout>\n<delay>5000ms</delay><goto ref="breach">',
     '<landing><start-rain><goto ref="welcome">',
   ];
@@ -884,11 +887,11 @@
   // <gosub ref="label">: paste the tagged program's body (its <landing>, <tag> and trailing
   // <stop …> stripped) into the caller's text, so its commands run inline. Recursive; a label
   // already being expanded (a cycle) or a missing ref expands to nothing.
-  function expandGosubs(text, chain = []) {
+  function expandGosubs(text, chain = [], state) {
     return text.replace(/<gosub ref="([^"]*)"\s*\/?>/g, (_, label) => {
       const i = taggedIndex(label);
       if (i < 0 || chain.includes(label) || chain.length >= 16) return '';
-      return expandGosubs(readProgram(expandConditionals(PROGRAMS[i])).body, [...chain, label]);
+      return expandGosubs(readProgram(expandConditionals(PROGRAMS[i], state)).body, [...chain, label], state);
     });
   }
 
@@ -896,9 +899,9 @@
   // program starts, before anything else reads it. The branch for the condition's state replaces
   // the block verbatim, so it may hold any commands, even the closing <stop> or <goto>. Nests,
   // either kind in the other (innermost first); a block without exactly one <else> expands to nothing.
+  // `state` overrides the live snapshot (the transcript renders as a returning visitor).
   const CONDITIONAL = /<(have-cookie|in-startup)\s*>((?:(?!<\/?(?:have-cookie|in-startup)\b)[\s\S])*?)<\/\1\s*>/;
-  function expandConditionals(text) {
-    const state = { 'have-cookie': hasCookie(), 'in-startup': inStartup };   // one snapshot per program start
+  function expandConditionals(text, state = { 'have-cookie': hasCookie(), 'in-startup': inStartup }) {   // one snapshot per program start
     for (let m; (m = CONDITIONAL.exec(text));) {
       const parts = m[2].split(/<else\s*\/?>/);
       if (parts.length !== 2) console.warn(`console: <${m[1]}> needs exactly one <else>`);
@@ -982,10 +985,13 @@
         ops.push({ bottomRow: Math.min(1, Number(m[11] || 0)) });   // delta: ≤ 0, or 1 to park the cursor
       } else if (m[9] !== undefined) {
         // <a href="…" download? target? bmpage?>text</a>: a web link; without an href it's plain text.
+        // <a transcript="name.txt" download? bmpage?>text</a>: downloads generated text as name.txt.
         const at = {};
         for (const [, k, q, bare] of m[9].matchAll(/([a-z][\w-]*)(?:\s*=\s*(?:"([^"]*)"|([^\s"]+)))?/gi)) at[k.toLowerCase()] = q ?? bare ?? '';
         const bmpage = /^\d+$/.test(at.bmpage ?? '') ? Number(at.bmpage) : undefined;
-        ops.push(at.href !== undefined
+        ops.push(at.transcript !== undefined
+          ? { text: m[10], transcript: at.transcript || 'transcript.txt', bmpage }
+          : at.href !== undefined
           ? { text: m[10], href: at.href, download: at.download, newTab: at.target === '_blank', bmpage }
           : { text: m[10] });
       }
@@ -1116,6 +1122,7 @@
           : op.link === 'next' ? (pageIndex + 1 < PROGRAMS.length      // <prog ref=next>: the program after this one
             ? { kind: 'prog', index: pageIndex + 1, oneWay: op.oneWay, noStack: op.noStack } : { kind: 'broken', ref: 'next' })
           : op.link !== undefined ? { kind: taggedIndex(op.link) >= 0 ? 'prog' : 'broken', ref: op.link, oneWay: op.oneWay, noStack: op.noStack }
+          : op.transcript !== undefined ? { kind: 'url', transcript: op.transcript }
           : op.href !== undefined ? { kind: 'url', href: op.href, download: op.download, newTab: op.newTab }
           : op.freak ? { kind: 'freak', ...op.freak, t0: Infinity, seedX: randomSeed(), seedY: randomSeed() } : null;
         if (attr && bm === 'done') attr.done = true;
@@ -1284,16 +1291,91 @@
     if ((link && link.kind === 'back') || (hoverLink && hoverLink.kind === 'back')) dirty = true;   // underline on hover
     hoverLink = link;
     canvas.style.cursor = link && link.kind !== 'broken' ? 'pointer' : '';
-    canvas.title = link && link.kind === 'url' ? link.href : '';     // native tooltip shows the URL
+    canvas.title = link && link.kind === 'url' ? link.transcript ?? link.href : '';     // native tooltip shows the URL (or file name)
+  }
+
+  // The text a <a transcript="…"> link downloads: welcome, then each section it links to, screen by
+  // screen, rendered for a returning visitor (have-cookie true, in-startup false; the bookmark
+  // doesn't matter, as a gated link is still its text) without touching the real state. A section
+  // runs from its first program through PROGRAMS until a screen links to welcome, has no
+  // <prog ref=next>, or the next program starts another section. Side pages (other links) and
+  // anything from a <bottom-row> on (the footer) are left out; so are images and nav links (next,
+  // back, welcome). A video becomes its YouTube URL, an <a href> its text plus the URL.
+  const TRANSCRIPT_STATE = { 'have-cookie': true, 'in-startup': false };
+
+  // → { screens: ['…', …] (one per clear), links: [prog refs], hasNext }
+  function screenTranscript(i) {
+    const prog = readProgram(expandConditionals(PROGRAMS[i], TRANSCRIPT_STATE));
+    const body = stamp(expandGosubs(prog.body, prog.label ? [prog.label] : [], TRANSCRIPT_STATE))
+      .replace(/<\/center>(?!\n)/g, '</center>\n');      // back-to-back captions on their own lines
+    const screens = [''], links = [];
+    let hasNext = false, footer = false;
+    for (const op of parse(body).slice(1)) {             // parse's leading clear is the screen itself
+      if (op.cls) { screens.push(''); footer = false; }
+      else if (op.row !== undefined) footer = false;
+      else if (op.bottomRow !== undefined) footer = true;
+      else if (footer) continue;
+      else if (op.video !== undefined) screens[screens.length - 1] += `\nhttps://www.youtube.com/watch?v=${op.video}\n`;
+      else if (op.link !== undefined) {
+        if (op.link === 'next') hasNext = true;
+        else if (op.link !== 'back') links.push(op.link);
+        if (!['next', 'back', 'welcome'].includes(op.link)) screens[screens.length - 1] += op.text;
+      }
+      else if (op.href !== undefined) screens[screens.length - 1] += `${op.text} (${op.href})`;
+      else if (op.text !== undefined && !op.replaceOld) screens[screens.length - 1] += op.text;
+    }
+    const tidy = s => s.replace(/[ \t]+$/gm, '').replace(/\n{3,}/g, '\n\n').trim();
+    return { screens: screens.map(tidy).filter(Boolean), links, hasNext };
+  }
+
+  function transcriptText() {
+    const welcome = screenTranscript(taggedIndex('welcome'));
+    const starts = welcome.links.map(taggedIndex).filter(i => i >= 0);
+    const screens = [...welcome.screens];
+    for (const start of starts) {
+      for (let i = start; i < PROGRAMS.length; i++) {
+        const s = screenTranscript(i);
+        screens.push(...s.screens);
+        if (s.links.includes('welcome') || !s.hasNext || starts.includes(i + 1)) break;
+      }
+    }
+    return screens.map(s => `${'-'.repeat(60)}\n${s}\n`).join('');
+  }
+
+  // Save a blob as a file through a temporary anchor: a blob URL is same-origin, so the browser
+  // honours the download name (from file:// too).
+  function saveBlob(blob, name) {
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
   }
 
   // Follow an <a> link through a real, temporary anchor, so the browser applies its own URL
-  // resolution and download rules (download works for same-origin URLs only). Called from the
-  // visitor's click, which counts as user activation for new tabs and downloads.
+  // resolution and download rules. Called from the visitor's click, which counts as user
+  // activation for new tabs and downloads. A transcript link saves transcriptText(). The browser
+  // ignores download on a cross-origin URL (and just opens it), so such a link is fetched and
+  // saved as a blob instead; if the fetch fails (no CORS, offline, file://) the link opens.
   function followUrl(link, newTab) {
+    if (link.transcript !== undefined) {
+      saveBlob(new Blob([transcriptText()], { type: 'text/plain;charset=utf-8' }), link.transcript);
+      return;
+    }
     let url;
     try { url = new URL(link.href, document.baseURI); } catch (e) { return; }
     if (url.protocol === 'javascript:' || url.protocol === 'vbscript:') return;
+    if (link.download !== undefined && url.origin !== location.origin) {
+      const name = link.download || decodeURIComponent(url.pathname.split('/').pop()) || 'download';
+      fetch(url)
+        .then(res => { if (!res.ok) throw new Error(res.status); return res.blob(); })
+        .then(blob => saveBlob(blob, name))
+        .catch(() => followUrl({ href: link.href }, false));
+      return;
+    }
     const a = document.createElement('a');
     a.href = link.href;
     if (link.download !== undefined) a.download = link.download;
