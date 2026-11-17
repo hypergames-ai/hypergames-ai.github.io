@@ -226,6 +226,19 @@ MatrixConsole.getBookmark(); MatrixConsole.setBookmark(3);  // the bookmark (set
 MatrixConsole.noDisplayDelay = true;     // next program appears at once: no delays or replace effect (one-shot)
 ```
 
+## Sharing on X
+
+The site shares two ways, depending on which URL goes in the post:
+
+- `https://hypergames.ai/`: a large image card. The feed shows `card.png` and links to the
+  site. Edit the meta tags in the root `index.html` and replace `card.png` (ideally 1200×628;
+  X shows no title or description on this card, so any words go in the image).
+- `https://hypergames.ai/site/`: a player card. The feed embeds the live console in an iframe
+  (its text renders small). Edit the meta tags in `site/index.html` and its poster,
+  `site/poster.png`.
+
+X caches cards, so a change shows up only on a fresh share or after the cache expires.
+
 ## Notes
 
 - Simulation runs at a fixed 60 Hz and the rain is redrawn from simulation state, so it looks
